@@ -22,6 +22,8 @@ class CKeyID : public uint160
 public:
     CKeyID() : uint160() {}
     explicit CKeyID(const uint160& in) : uint160(in) {}
+
+    explicit CKeyID(const uint256& in);
 };
 
 typedef uint256 ChainCode;
@@ -107,6 +109,7 @@ public:
 
     //! Simple read-only vector-like interface to the pubkey data.
     unsigned int size() const { return GetLen(vch[0]); }
+    const unsigned char* data() const { return vch; }
     const unsigned char* begin() const { return vch; }
     const unsigned char* end() const { return vch + size(); }
     const unsigned char& operator[](unsigned int pos) const { return vch[pos]; }
@@ -197,6 +200,9 @@ public:
 
     //! Turn this public key into an uncompressed public key.
     bool Decompress();
+
+    //! Turn this public key into a compressed public key.
+    bool Compress();
 
     //! Derive BIP32 child pubkey.
     bool Derive(CPubKey& pubkeyChild, ChainCode &ccChild, unsigned int nChild, const ChainCode& cc) const;

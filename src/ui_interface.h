@@ -116,6 +116,9 @@ public:
 
     /** Banlist did change. */
     boost::signals2::signal<void (void)> BannedListChanged;
+
+    /** Waiting for hardware device */
+    boost::signals2::signal<void (bool)> NotifyWaitingForDevice;
 };
 
 /** Show warning message **/

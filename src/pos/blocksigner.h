@@ -6,7 +6,7 @@ class CPubKey;
 class CKey;
 class CKeyStore;
 
+bool GetKeyIDFromUTXO(const CTxOut& txout, CKeyID& keyID);
 bool SignBlock(CBlock& block, const CKeyStore& keystore);
-bool CheckBlockSignature(const CBlock& block);
 
 #endif // BLOCKSIGNER_H

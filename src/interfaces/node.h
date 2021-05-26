@@ -321,6 +321,9 @@ public:
     using NotifyAdditionalDataSyncProgressChangedFn =
         std::function<void(double nSyncProgress)>;
     virtual std::unique_ptr<Handler> handleNotifyAdditionalDataSyncProgressChanged(NotifyAdditionalDataSyncProgressChangedFn fn) = 0;
+
+    using WaitingForDeviceFn = std::function<void(bool waiting_for_device)>;
+    virtual std::unique_ptr<Handler> handleNotifyWaitingForDevice(WaitingForDeviceFn fn) = 0;
 };
 
 //! Return implementation of Node interface.

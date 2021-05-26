@@ -7,6 +7,7 @@
 #include <chainparams.h>
 #include <consensus/merkle.h>
 
+#include <extwallet/extkey.h>
 #include <tinyformat.h>
 #include <util.h>
 #include <utilstrencodings.h>
@@ -361,6 +362,7 @@ public:
         consensus.fPowNoRetargeting = false;
         consensus.nPowKGWHeight = 15200;
         consensus.nPowDGWHeight = 34140;
+        consensus.nExternalKeyHeight = 640000;
         consensus.nRuleChangeActivationThreshold = 1916; // 95% of 2016
         consensus.nMinerConfirmationWindow = 2016; // nPowTargetTimespan / nPowTargetSpacing
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].bit = 28;
@@ -449,6 +451,8 @@ public:
         pchMessageStart[3] = 0x2c;
         nDefaultPort = 7112;
         nPruneAfterHeight = 100000;
+        nBIP44ID = (int)WithHardenedBit(8192);
+        assert(nBIP44ID == (int)0x80002000);
 
         genesis = CreateGenesisBlock(1517541873, 340503, 0x1e0ffff0, 1, 50 * COIN);
         consensus.hashGenesisBlock = genesis.GetHash();
@@ -472,9 +476,6 @@ public:
         base58Prefixes[EXT_PUBLIC_KEY] = {0x03, 0xdd, 0x3e, 0x31};
         // pacprotocol BIP32 prvkeys start with 'pacv'
         base58Prefixes[EXT_SECRET_KEY] = {0x03, 0xdd, 0x3e, 0x5a};
-
-        // pacprotocol BIP44 coin type is '8192'
-        nExtCoinType = 8192;
 
         vFixedSeeds = std::vector<SeedSpec6>(pnSeed6_main, pnSeed6_main + ARRAYLEN(pnSeed6_main));
 
@@ -656,9 +657,6 @@ public:
         // pacprotocol BIP32 prvkeys start with 'tacv'
         base58Prefixes[EXT_SECRET_KEY] = {0x04, 0x30, 0x68, 0xaa};
 
-        // Testnet Dash BIP44 coin type is '1' (All coin's testnet default)
-        nExtCoinType = 1;
-
         // long living quorum params
         consensus.llmqs[Consensus::LLMQ_50_60] = llmq50_60;
         consensus.llmqs[Consensus::LLMQ_400_60] = llmq400_60;
@@ -820,9 +818,6 @@ public:
         base58Prefixes[EXT_PUBLIC_KEY] = {0x04, 0x35, 0x87, 0xCF};
         // Testnet Dash BIP32 prvkeys start with 'tprv' (Bitcoin defaults)
         base58Prefixes[EXT_SECRET_KEY] = {0x04, 0x35, 0x83, 0x94};
-
-        // Testnet Dash BIP44 coin type is '1' (All coin's testnet default)
-        nExtCoinType = 1;
 
         // long living quorum params
         consensus.llmqs[Consensus::LLMQ_DEVNET] = llmq_devnet;
@@ -1000,9 +995,6 @@ public:
         base58Prefixes[EXT_PUBLIC_KEY] = {0x04, 0x35, 0x87, 0xCF};
         // Regtest Dash BIP32 prvkeys start with 'tprv' (Bitcoin defaults)
         base58Prefixes[EXT_SECRET_KEY] = {0x04, 0x35, 0x83, 0x94};
-
-        // Regtest Dash BIP44 coin type is '1' (All coin's testnet default)
-        nExtCoinType = 1;
 
         // long living quorum params
         consensus.llmqs[Consensus::LLMQ_TEST] = llmq_test;

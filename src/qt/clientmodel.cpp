@@ -272,6 +272,12 @@ static void NotifyMasternodeListChanged(ClientModel *clientmodel, const CDetermi
     clientmodel->setMasternodeList(newList);
 }
 
+static void NotifyWaitingForDevice(ClientModel *clientmodel, bool fCompleted)
+{
+    QMetaObject::invokeMethod(clientmodel, "waitingForDevice", Qt::AutoConnection,
+                              Q_ARG(bool, fCompleted));
+}
+
 static void NotifyAdditionalDataSyncProgressChanged(ClientModel *clientmodel, double nSyncProgress)
 {
     QMetaObject::invokeMethod(clientmodel, "additionalDataSyncProgressChanged", Qt::QueuedConnection,
@@ -290,6 +296,7 @@ void ClientModel::subscribeToCoreSignals()
     m_handler_notify_header_tip = m_node.handleNotifyHeaderTip(boost::bind(BlockTipChanged, this, _1, _2, _3, _4, _5, true));
     m_handler_notify_masternodelist_changed = m_node.handleNotifyMasternodeListChanged(boost::bind(NotifyMasternodeListChanged, this, _1));
     m_handler_notify_additional_data_sync_progess_changed = m_node.handleNotifyAdditionalDataSyncProgressChanged(boost::bind(NotifyAdditionalDataSyncProgressChanged, this, _1));
+    m_handler_notify_waiting_for_device = m_node.handleNotifyWaitingForDevice(boost::bind(NotifyWaitingForDevice, this, _1));
 }
 
 void ClientModel::unsubscribeFromCoreSignals()
@@ -304,4 +311,5 @@ void ClientModel::unsubscribeFromCoreSignals()
     m_handler_notify_header_tip->disconnect();
     m_handler_notify_masternodelist_changed->disconnect();
     m_handler_notify_additional_data_sync_progess_changed->disconnect();
+    m_handler_notify_waiting_for_device->disconnect();
 }

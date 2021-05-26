@@ -47,6 +47,8 @@ namespace GUIUtil
     enum class ThemedColor {
         /* Transaction list -- TX status decoration - default color */
         DEFAULT,
+        /* Hardware device color */
+        BLACK,
         /* Transaction list -- unconfirmed transaction */
         UNCONFIRMED,
         /* Theme related blue color */

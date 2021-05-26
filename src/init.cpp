@@ -20,6 +20,7 @@
 #include <node/coinstats.h>
 #include <compat/sanity.h>
 #include <consensus/validation.h>
+#include <extwallet/device.h>
 #include <fs.h>
 #include <httpserver.h>
 #include <httprpc.h>
@@ -119,7 +120,6 @@ public:
     // Dash Specific WalletInitInterface InitCoinJoinSettings
     void AutoLockMasternodeCollaterals() const override {}
     void InitCoinJoinSettings() const override {}
-    void InitKeePass() const override {}
     bool InitAutoBackup() const override {return true;}
 };
 
@@ -1686,6 +1686,12 @@ bool AppInitMain()
         }
     }
 
+    //! we need to know this early on
+    {
+        LOCK(cs_main);
+        IsExternalDeviceAttached();
+    }
+
     if (!fLogTimestamps)
         LogPrintf("Startup time: %s\n", FormatISO8601DateTime(GetTime()));
     LogPrintf("Default data directory %s\n", GetDefaultDataDir().string());
@@ -1770,8 +1776,6 @@ bool AppInitMain()
     if (!g_wallet_init_interface.InitAutoBackup()) return false;
     if (!g_wallet_init_interface.Verify()) return false;
 
-    // Initialize KeePass Integration
-    g_wallet_init_interface.InitKeePass();
     // ********************************************************* Step 6: network initialization
     // Note that we absolutely cannot open any actual connections
     // until the very end ("start node") as the UTXO/block state

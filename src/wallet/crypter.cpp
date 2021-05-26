@@ -118,29 +118,6 @@ static bool EncryptSecret(const CKeyingMaterial& vMasterKey, const CKeyingMateri
     return cKeyCrypter.Encrypt(*((const CKeyingMaterial*)&vchPlaintext), vchCiphertext);
 }
 
-
-// General secure AES 256 CBC encryption routine
-bool EncryptAES256(const SecureString& sKey, const SecureString& sPlaintext, const std::string& sIV, std::string& sCiphertext)
-{
-    // Verify key sizes
-    if(sKey.size() != 32 || sIV.size() != AES_BLOCKSIZE) {
-        LogPrintf("crypter EncryptAES256 - Invalid key or block size: Key: %d sIV:%d\n", sKey.size(), sIV.size());
-        return false;
-    }
-
-    // max ciphertext len for a n bytes of plaintext is
-    // n + AES_BLOCKSIZE bytes
-    sCiphertext.resize(sPlaintext.size() + AES_BLOCKSIZE);
-
-    AES256CBCEncrypt enc((const unsigned char*) &sKey[0], (const unsigned char*) &sIV[0], true);
-    size_t nLen = enc.Encrypt((const unsigned char*) &sPlaintext[0], sPlaintext.size(), (unsigned char*) &sCiphertext[0]);
-    if(nLen < sPlaintext.size())
-        return false;
-    sCiphertext.resize(nLen);
-    return true;
-}
-
-
 static bool DecryptSecret(const CKeyingMaterial& vMasterKey, const std::vector<unsigned char>& vchCiphertext, const uint256& nIV, CKeyingMaterial& vchPlaintext)
 {
     CCrypter cKeyCrypter;
@@ -150,29 +127,6 @@ static bool DecryptSecret(const CKeyingMaterial& vMasterKey, const std::vector<u
         return false;
     return cKeyCrypter.Decrypt(vchCiphertext, *((CKeyingMaterial*)&vchPlaintext));
 }
-
-// General secure AES 256 CBC decryption routine
-bool DecryptAES256(const SecureString& sKey, const std::string& sCiphertext, const std::string& sIV, SecureString& sPlaintext)
-{
-    // Verify key sizes
-    if(sKey.size() != 32 || sIV.size() != AES_BLOCKSIZE) {
-        LogPrintf("crypter DecryptAES256 - Invalid key or block size\n");
-        return false;
-    }
-
-    // plaintext will always be equal to or lesser than length of ciphertext
-    int nLen = sCiphertext.size();
-
-    sPlaintext.resize(nLen);
-
-    AES256CBCDecrypt dec((const unsigned char*) &sKey[0], (const unsigned char*) &sIV[0], true);
-    nLen = dec.Decrypt((const unsigned char*) &sCiphertext[0], sCiphertext.size(), (unsigned char*) &sPlaintext[0]);
-    if(nLen == 0)
-        return false;
-    sPlaintext.resize(nLen);
-    return true;
-}
-
 
 static bool DecryptKey(const CKeyingMaterial& vMasterKey, const std::vector<unsigned char>& vchCryptedSecret, const CPubKey& vchPubKey, CKey& key)
 {
@@ -271,24 +225,10 @@ bool CCryptoKeyStore::Unlock(const CKeyingMaterial& vMasterKeyIn, bool fForMixin
             LogPrintf("The wallet is probably corrupted: Some keys decrypt but not all.\n");
             assert(false);
         }
-        if (keyFail || (!keyPass && cryptedHDChain.IsNull()))
+        if (keyFail || !keyPass)
             return false;
 
         vMasterKey = vMasterKeyIn;
-
-        if(!cryptedHDChain.IsNull()) {
-            bool chainPass = false;
-            // try to decrypt seed and make sure it matches
-            CHDChain hdChainTmp;
-            if (DecryptHDChain(hdChainTmp)) {
-                // make sure seed matches this chain
-                chainPass = cryptedHDChain.GetID() == hdChainTmp.GetSeedHash();
-            }
-            if (!chainPass) {
-                vMasterKey.clear();
-                return false;
-            }
-        }
         fDecryptionThoroughlyChecked = true;
     }
     fOnlyMixingAllowed = fForMixingOnly;
@@ -406,153 +346,4 @@ bool CCryptoKeyStore::EncryptKeys(CKeyingMaterial& vMasterKeyIn)
     }
     mapKeys.clear();
     return true;
-}
-
-bool CCryptoKeyStore::EncryptHDChain(const CKeyingMaterial& vMasterKeyIn, const CHDChain& chain)
-{
-    LOCK(cs_KeyStore);
-    // should call EncryptKeys first
-    if (!IsCrypted())
-        return false;
-
-    if (!cryptedHDChain.IsNull())
-        return true;
-
-    if (cryptedHDChain.IsCrypted())
-        return true;
-
-    if (hdChain.IsNull() && !chain.IsNull()) {
-        // Encrypting a new HDChain for an already encrypted non-HD wallet
-        hdChain = chain;
-    }
-
-    // make sure seed matches this chain
-    if (hdChain.GetID() != hdChain.GetSeedHash())
-        return false;
-
-    std::vector<unsigned char> vchCryptedSeed;
-    if (!EncryptSecret(vMasterKeyIn, hdChain.GetSeed(), hdChain.GetID(), vchCryptedSeed))
-        return false;
-
-    hdChain.Debug(__func__);
-    cryptedHDChain = hdChain;
-    cryptedHDChain.SetCrypted(true);
-
-    SecureVector vchSecureCryptedSeed(vchCryptedSeed.begin(), vchCryptedSeed.end());
-    if (!cryptedHDChain.SetSeed(vchSecureCryptedSeed, false))
-        return false;
-
-    SecureVector vchMnemonic;
-    SecureVector vchMnemonicPassphrase;
-
-    // it's ok to have no mnemonic if wallet was initialized via hdseed
-    if (hdChain.GetMnemonic(vchMnemonic, vchMnemonicPassphrase)) {
-        std::vector<unsigned char> vchCryptedMnemonic;
-        std::vector<unsigned char> vchCryptedMnemonicPassphrase;
-
-        if (!vchMnemonic.empty() && !EncryptSecret(vMasterKeyIn, vchMnemonic, hdChain.GetID(), vchCryptedMnemonic))
-            return false;
-        if (!vchMnemonicPassphrase.empty() && !EncryptSecret(vMasterKeyIn, vchMnemonicPassphrase, hdChain.GetID(), vchCryptedMnemonicPassphrase))
-            return false;
-
-        SecureVector vchSecureCryptedMnemonic(vchCryptedMnemonic.begin(), vchCryptedMnemonic.end());
-        SecureVector vchSecureCryptedMnemonicPassphrase(vchCryptedMnemonicPassphrase.begin(), vchCryptedMnemonicPassphrase.end());
-        if (!cryptedHDChain.SetMnemonic(vchSecureCryptedMnemonic, vchSecureCryptedMnemonicPassphrase, false))
-            return false;
-    }
-
-    if (!hdChain.SetNull())
-        return false;
-
-    return true;
-}
-
-bool CCryptoKeyStore::DecryptHDChain(CHDChain& hdChainRet) const
-{
-    LOCK(cs_KeyStore);
-    if (!IsCrypted())
-        return true;
-
-    if (cryptedHDChain.IsNull())
-        return false;
-
-    if (!cryptedHDChain.IsCrypted())
-        return false;
-
-    SecureVector vchSecureSeed;
-    SecureVector vchSecureCryptedSeed = cryptedHDChain.GetSeed();
-    std::vector<unsigned char> vchCryptedSeed(vchSecureCryptedSeed.begin(), vchSecureCryptedSeed.end());
-    if (!DecryptSecret(vMasterKey, vchCryptedSeed, cryptedHDChain.GetID(), vchSecureSeed))
-        return false;
-
-    hdChainRet = cryptedHDChain;
-    if (!hdChainRet.SetSeed(vchSecureSeed, false))
-        return false;
-
-    // hash of decrypted seed must match chain id
-    if (hdChainRet.GetSeedHash() != cryptedHDChain.GetID())
-        return false;
-
-    SecureVector vchSecureCryptedMnemonic;
-    SecureVector vchSecureCryptedMnemonicPassphrase;
-
-    // it's ok to have no mnemonic if wallet was initialized via hdseed
-    if (cryptedHDChain.GetMnemonic(vchSecureCryptedMnemonic, vchSecureCryptedMnemonicPassphrase)) {
-        SecureVector vchSecureMnemonic;
-        SecureVector vchSecureMnemonicPassphrase;
-
-        std::vector<unsigned char> vchCryptedMnemonic(vchSecureCryptedMnemonic.begin(), vchSecureCryptedMnemonic.end());
-        std::vector<unsigned char> vchCryptedMnemonicPassphrase(vchSecureCryptedMnemonicPassphrase.begin(), vchSecureCryptedMnemonicPassphrase.end());
-
-        if (!vchCryptedMnemonic.empty() && !DecryptSecret(vMasterKey, vchCryptedMnemonic, cryptedHDChain.GetID(), vchSecureMnemonic))
-            return false;
-        if (!vchCryptedMnemonicPassphrase.empty() && !DecryptSecret(vMasterKey, vchCryptedMnemonicPassphrase, cryptedHDChain.GetID(), vchSecureMnemonicPassphrase))
-            return false;
-
-        if (!hdChainRet.SetMnemonic(vchSecureMnemonic, vchSecureMnemonicPassphrase, false))
-            return false;
-    }
-
-    hdChainRet.SetCrypted(false);
-    hdChainRet.Debug(__func__);
-
-    return true;
-}
-
-bool CCryptoKeyStore::SetHDChain(const CHDChain& chain)
-{
-    LOCK(cs_KeyStore);
-    if (IsCrypted())
-        return false;
-
-    if (chain.IsCrypted())
-        return false;
-
-    hdChain = chain;
-    return true;
-}
-
-bool CCryptoKeyStore::SetCryptedHDChain(const CHDChain& chain)
-{
-    LOCK(cs_KeyStore);
-    if (!SetCrypted())
-        return false;
-
-    if (!chain.IsCrypted())
-        return false;
-
-    cryptedHDChain = chain;
-    return true;
-}
-
-bool CCryptoKeyStore::GetHDChain(CHDChain& hdChainRet) const
-{
-    LOCK(cs_KeyStore);
-    if(IsCrypted()) {
-        hdChainRet = cryptedHDChain;
-        return !cryptedHDChain.IsNull();
-    }
-
-    hdChainRet = hdChain;
-    return !hdChain.IsNull();
 }

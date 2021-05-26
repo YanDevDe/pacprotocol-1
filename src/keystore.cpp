@@ -36,6 +36,10 @@ bool CBasicKeyStore::HaveKey(const CKeyID &address) const
     return mapKeys.count(address) > 0;
 }
 
+bool CBasicKeyStore::HaveHardwareKey(const CKeyID &address) const {
+    return false;
+}
+
 std::set<CKeyID> CBasicKeyStore::GetKeys() const
 {
     LOCK(cs_KeyStore);
@@ -143,9 +147,19 @@ bool CBasicKeyStore::HaveWatchOnly() const
     return (!setWatchOnly.empty());
 }
 
-bool CBasicKeyStore::GetHDChain(CHDChain& hdChainRet) const
+CKeyID GetKeyForDestination(const CKeyStore& store, const CTxDestination& dest)
 {
-    LOCK(cs_KeyStore);
-    hdChainRet = hdChain;
-    return !hdChain.IsNull();
+    // Only supports destinations which map to single public keys, i.e. P2PKH,
+    // P2WPKH, and P2SH-P2WPKH.
+    if (auto id = boost::get<CKeyID>(&dest)) {
+        return *id;
+    }
+    return CKeyID();
+}
+
+bool HaveKey(const CKeyStore& store, const CKey& key)
+{
+    CKey key2;
+    key2.Set(key.begin(), key.end(), !key.IsCompressed());
+    return store.HaveKey(key.GetPubKey().GetID()) || store.HaveKey(key2.GetPubKey().GetID());
 }

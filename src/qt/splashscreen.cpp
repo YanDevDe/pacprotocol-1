@@ -222,7 +222,7 @@ void SplashScreen::paintEvent(QPaintEvent *event)
 {
     QPainter painter(this);
     QFont messageFont = GUIUtil::getFontNormal();
-    messageFont.setPointSize(14);
+    messageFont.setPointSize(12);
     painter.setFont(messageFont);
     painter.drawPixmap(0, 0, pixmap);
     QRect r = rect().adjusted(5, 5, -5, -15);

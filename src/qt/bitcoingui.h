@@ -18,6 +18,7 @@
 #include <QPoint>
 #include <QPushButton>
 #include <QSystemTrayIcon>
+#include <QMessageBox>
 
 #include <memory>
 
@@ -216,6 +217,8 @@ private:
 
     void updateProgressBarVisibility();
 
+    QMessageBox mbDevice;
+
 Q_SIGNALS:
     /** Signal raised when a URI was entered or dragged to the GUI */
     void receivedURI(const QString &uri);
@@ -242,6 +245,9 @@ public Q_SLOTS:
        @param[in] ret       pointer to a bool that will be modified to whether Ok was clicked (modal only)
     */
     void message(const QString &title, const QString &message, unsigned int style, bool *ret = nullptr);
+
+    // Waiting for hardware device
+    void waitingForDevice(bool fCompleted);
 
 #ifdef ENABLE_WALLET
     bool setCurrentWallet(const QString& name);

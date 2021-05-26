@@ -170,7 +170,6 @@ BITCOIN_CORE_H = \
   governance/governance-vote.h \
   governance/governance-votedb.h \
   flat-database.h \
-  hdchain.h \
   fs.h \
   httprpc.h \
   httpserver.h \
@@ -181,7 +180,6 @@ BITCOIN_CORE_H = \
   interfaces/wallet.h \
   key.h \
   key_io.h \
-  keepass.h \
   keystore.h \
   dbwrapper.h \
   limitedmap.h \
@@ -231,6 +229,7 @@ BITCOIN_CORE_H = \
   rpc/mining.h \
   rpc/protocol.h \
   rpc/server.h \
+  rpc/rpcutil.h \
   rpc/rawtransaction.h \
   rpc/register.h \
   rpc/util.h \
@@ -359,6 +358,7 @@ libdash_server_a_SOURCES = \
   pow.cpp \
   rest.cpp \
   rpc/blockchain.cpp \
+  rpc/rpcutil.cpp \
   rpc/masternode.cpp \
   rpc/governance.cpp \
   rpc/mining.cpp \
@@ -393,7 +393,6 @@ libdash_zmq_a_SOURCES = \
   zmq/zmqrpc.cpp
 endif
 
-
 # wallet: shared between dashd and dash-qt, but only linked
 # when wallet enabled
 libdash_wallet_a_CPPFLAGS = $(AM_CPPFLAGS) $(BITCOIN_INCLUDES)
@@ -402,8 +401,16 @@ libdash_wallet_a_SOURCES = \
   coinjoin/coinjoin-client.cpp \
   coinjoin/coinjoin-client-options.cpp \
   coinjoin/coinjoin-util.cpp \
+  extwallet/device.cpp \
+  extwallet/device.h \
+  extwallet/extkey.cpp \
+  extwallet/extkey.h \
+  extwallet/util.cpp \
+  extwallet/util.h \
+  extwallet/wallet.cpp \
+  extwallet/wrapper.cpp \
+  extwallet/wrapper.h \
   interfaces/wallet.cpp \
-  keepass.cpp \
   wallet/crypter.cpp \
   wallet/db.cpp \
   wallet/fees.cpp \
@@ -542,7 +549,6 @@ libdash_common_a_SOURCES = \
   compressor.cpp \
   core_read.cpp \
   core_write.cpp \
-  hdchain.cpp \
   key.cpp \
   key_io.cpp \
   keystore.cpp \
@@ -749,7 +755,6 @@ if HARDEN
 	@echo "Checking binary security..."
 	$(AM_V_at) READELF=$(READELF) OBJDUMP=$(OBJDUMP) $(top_srcdir)/contrib/devtools/security-check.py < $(bin_PROGRAMS)
 endif
-
 
 osx_debug: $(bin_PROGRAMS)
 	for i in $(bin_PROGRAMS); do mkdir -p $$i.dSYM/Contents/Resources/DWARF && $(DSYMUTIL_FLAT) -o $$i.dSYM/Contents/Resources/DWARF/$$(basename $$i) $$i &> /dev/null ; done

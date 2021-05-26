@@ -9,7 +9,6 @@
 #include <consensus/validation.h>
 #include <core_io.h>
 #include <httpserver.h>
-#include <keepass.h>
 #include <net.h>
 #include <policy/feerate.h>
 #include <policy/fees.h>
@@ -160,6 +159,10 @@ UniValue getnewaddress(const JSONRPCRequest& request)
             + HelpExampleRpc("getnewaddress", "")
         );
 
+    if (pwallet->IsWalletFlagSet(WALLET_FLAG_DISABLE_PRIVATE_KEYS)) {
+        throw JSONRPCError(RPC_WALLET_ERROR, "Error: Private keys are disabled for this wallet");
+    }
+
     LOCK2(cs_main, pwallet->cs_wallet);
 
     // Parse the label first so we don't generate a key if there's an error
@@ -256,6 +259,10 @@ UniValue getrawchangeaddress(const JSONRPCRequest& request)
             + HelpExampleCli("getrawchangeaddress", "")
             + HelpExampleRpc("getrawchangeaddress", "")
        );
+
+    if (pwallet->IsWalletFlagSet(WALLET_FLAG_DISABLE_PRIVATE_KEYS)) {
+        throw JSONRPCError(RPC_WALLET_ERROR, "Error: Private keys are disabled for this wallet");
+    }
 
     LOCK2(cs_main, pwallet->cs_wallet);
 
@@ -2457,11 +2464,15 @@ UniValue keypoolrefill(const JSONRPCRequest& request)
             "\nFills the keypool."
             + HelpRequiringPassphrase(pwallet) + "\n"
             "\nArguments:\n"
-            "1. newsize     (numeric, optional, default=" + itostr(DEFAULT_KEYPOOL_SIZE) + ") The new keypool size\n"
+            "1. newsize     (numeric, optional)\n"
             "\nExamples:\n"
             + HelpExampleCli("keypoolrefill", "")
             + HelpExampleRpc("keypoolrefill", "")
         );
+
+    if (pwallet->IsWalletFlagSet(WALLET_FLAG_DISABLE_PRIVATE_KEYS)) {
+        throw JSONRPCError(RPC_WALLET_ERROR, "Error: Private keys are disabled for this wallet");
+    }
 
     LOCK2(cs_main, pwallet->cs_wallet);
 
@@ -3019,21 +3030,9 @@ UniValue getwalletinfo(const JSONRPCRequest& request)
             "  \"keys_left\": xxxx,          (numeric) how many new keys are left since last automatic backup\n"
             "  \"unlocked_until\": ttt,      (numeric) the timestamp in seconds since epoch (midnight Jan 1 1970 GMT) that the wallet is unlocked for transfers, or 0 if the wallet is locked\n"
             "  \"paytxfee\": x.xxxx,         (numeric) the transaction fee configuration, set in " + CURRENCY_UNIT + "/kB\n"
-            "  \"hdchainid\": \"<hash>\",      (string) the ID of the HD chain\n"
-            "  \"hdaccountcount\": xxx,      (numeric) how many accounts of the HD chain are in this wallet\n"
-            "    [\n"
-            "      {\n"
-            "      \"hdaccountindex\": xxx,         (numeric) the index of the account\n"
-            "      \"hdexternalkeyindex\": xxxx,    (numeric) current external childkey index\n"
-            "      \"hdinternalkeyindex\": xxxx,    (numeric) current internal childkey index\n"
-            "      }\n"
-            "      ,...\n"
-            "    ]\n"
-            "  \"scanning\":                        (json object) current scanning details, or false if no scan is in progress\n"
-            "    {\n"
-            "      \"duration\" : xxxx              (numeric) elapsed seconds since scan start\n"
-            "      \"progress\" : x.xxxx,           (numeric) scanning progress percentage [0.0, 1.0]\n"
-            "    }\n"
+            "  \"hdseedid\": \"<hash160>\"            (string, optional) the Hash160 of the HD seed (only present when HD is enabled)\n"
+            "  \"hdmasterkeyid\": \"<hash160>\"       (string, optional) alias for hdseedid retained for backwards-compatibility. Will be removed in V0.18.\n"
+            "  \"private_keys_enabled\": true|false (boolean) false if privatekeys are disabled for this wallet (enforced watch-only wallet)\n"
             "}\n"
             "\nExamples:\n"
             + HelpExampleCli("getwalletinfo", "")
@@ -3046,10 +3045,9 @@ UniValue getwalletinfo(const JSONRPCRequest& request)
 
     LOCK2(cs_main, pwallet->cs_wallet);
 
-    CHDChain hdChainCurrent;
-    bool fHDEnabled = pwallet->GetHDChain(hdChainCurrent);
     UniValue obj(UniValue::VOBJ);
 
+    size_t kpExternalSize = pwallet->KeypoolCountExternalKeys();
     obj.pushKV("walletname", pwallet->GetName());
     obj.pushKV("walletversion", pwallet->GetVersion());
     obj.pushKV("balance",       ValueFromAmount(pwallet->GetBalance()));
@@ -3057,43 +3055,17 @@ UniValue getwalletinfo(const JSONRPCRequest& request)
     obj.pushKV("unconfirmed_balance", ValueFromAmount(pwallet->GetUnconfirmedBalance()));
     obj.pushKV("immature_balance",    ValueFromAmount(pwallet->GetImmatureBalance()));
     obj.pushKV("txcount",       (int)pwallet->mapWallet.size());
-    obj.pushKV("timefirstkey", pwallet->GetTimeFirstKey());
     obj.pushKV("keypoololdest", pwallet->GetOldestKeyPoolTime());
-    obj.pushKV("keypoolsize",   (int64_t)pwallet->KeypoolCountExternalKeys());
-    if (fHDEnabled) {
-        obj.pushKV("keypoolsize_hd_internal",   (int64_t)(pwallet->KeypoolCountInternalKeys()));
+    obj.pushKV("keypoolsize", (int64_t)kpExternalSize);
+    CKeyID seed_id = pwallet->GetHDChain().seed_id;
+    if (!seed_id.IsNull() && pwallet->CanSupportFeature(FEATURE_HD_SPLIT)) {
+        obj.pushKV("keypoolsize_hd_internal",   (int64_t)(pwallet->GetKeyPoolSize() - kpExternalSize));
     }
-    obj.pushKV("keys_left",     pwallet->nKeysLeftSinceAutoBackup);
-    if (pwallet->IsCrypted())
-        obj.pushKV("unlocked_until", pwallet->nRelockTime);
-    obj.pushKV("paytxfee",      ValueFromAmount(payTxFee.GetFeePerK()));
-    if (fHDEnabled) {
-        obj.pushKV("hdchainid", hdChainCurrent.GetID().GetHex());
-        obj.pushKV("hdaccountcount", (int64_t)hdChainCurrent.CountAccounts());
-        UniValue accounts(UniValue::VARR);
-        for (size_t i = 0; i < hdChainCurrent.CountAccounts(); ++i)
-        {
-            CHDAccount acc;
-            UniValue account(UniValue::VOBJ);
-            account.pushKV("hdaccountindex", (int64_t)i);
-            if(hdChainCurrent.GetAccount(i, acc)) {
-                account.pushKV("hdexternalkeyindex", (int64_t)acc.nExternalChainCounter);
-                account.pushKV("hdinternalkeyindex", (int64_t)acc.nInternalChainCounter);
-            } else {
-                account.pushKV("error", strprintf("account %d is missing", i));
-            }
-            accounts.push_back(account);
-        }
-        obj.pushKV("hdaccounts", accounts);
+    if (!seed_id.IsNull()) {
+        obj.pushKV("hdseedid", seed_id.GetHex());
+        obj.pushKV("hdmasterkeyid", seed_id.GetHex());
     }
-    if (pwallet->IsScanning()) {
-        UniValue scanning(UniValue::VOBJ);
-        scanning.pushKV("duration", pwallet->ScanningDuration() / 1000);
-        scanning.pushKV("progress", pwallet->ScanningProgress());
-        obj.pushKV("scanning", scanning);
-    } else {
-        obj.pushKV("scanning", false);
-    }
+    obj.pushKV("private_keys_enabled", !pwallet->IsWalletFlagSet(WALLET_FLAG_DISABLE_PRIVATE_KEYS));
     return obj;
 }
 
@@ -3127,161 +3099,6 @@ UniValue listwallets(const JSONRPCRequest& request)
     }
 
     return obj;
-}
-
-UniValue upgradetohd(const JSONRPCRequest& request)
-{
-    std::shared_ptr<CWallet> const wallet = GetWalletForJSONRPCRequest(request);
-    CWallet* const pwallet = wallet.get();
-
-    if (!EnsureWalletIsAvailable(pwallet, request.fHelp)) {
-        return NullUniValue;
-    }
-
-    if (request.fHelp)
-        throw std::runtime_error(
-                "upgradetohd\n"
-                "\nUpgrades non-HD wallets to HD.\n"
-                "\nWarning: You will need to make a new backup of your wallet after setting the HD wallet mnemonic.\n"
-                "\nArguments:\n"
-                "1. \"mnemonic\"             (string, optional, default=\"\") Mnemonic as defined in BIP39 to use for the new HD wallet."
-                "                          Use an empty string \"\" to generate a new random mnemonic.\n"
-                "2. \"mnemonicpassphrase\"   (string, optional, default=\"\") Optional mnemonic passphrase as defined in BIP39\n"
-                "3. \"walletpassphrase\"     (string, optional) If your wallet is encrypted you must have your wallet passphrase here\n"
-                "                          If your wallet is not encrypted specifying wallet passphrase will trigger wallet encryption.\n"
-
-                "\nExamples:\n"
-                + HelpExampleCli("upgradetohd", "")
-                + HelpExampleCli("upgradetohd", "\"mnemonicword1 ... mnemonicwordN\"")
-                + HelpExampleCli("upgradetohd", "\"mnemonicword1 ... mnemonicwordN\" \"mnemonicpassphrase\"")
-                + HelpExampleCli("upgradetohd", "\"mnemonicword1 ... mnemonicwordN\" \"mnemonicpassphrase\" \"walletpassphrase\""));
-
-    LOCK2(cs_main, pwallet->cs_wallet);
-
-    // Do not do anything to HD wallets
-    if (pwallet->IsHDEnabled()) {
-        throw JSONRPCError(RPC_WALLET_ERROR, "Cannot upgrade a wallet to HD if it is already upgraded to HD.");
-    }
-
-    if (!pwallet->SetMaxVersion(FEATURE_HD)) {
-        throw JSONRPCError(RPC_WALLET_ERROR, "Cannot downgrade wallet");
-    }
-
-    bool prev_encrypted = pwallet->IsCrypted();
-
-    SecureString secureWalletPassphrase;
-    secureWalletPassphrase.reserve(100);
-    // TODO: get rid of this .c_str() by implementing SecureString::operator=(std::string)
-    // Alternately, find a way to make request.params[0] mlock()'d to begin with.
-    if (request.params[2].isNull()) {
-        if (prev_encrypted) {
-            throw JSONRPCError(RPC_WALLET_PASSPHRASE_INCORRECT, "Cannot upgrade encrypted wallet to HD without the wallet passphrase");
-        }
-    } else {
-        secureWalletPassphrase = request.params[2].get_str().c_str();
-        if (!pwallet->Unlock(secureWalletPassphrase)) {
-            throw JSONRPCError(RPC_WALLET_PASSPHRASE_INCORRECT, "The wallet passphrase entered was incorrect");
-        }
-    }
-
-    bool generate_mnemonic = request.params[0].isNull() || request.params[0].get_str().empty();
-
-    SecureString secureMnemonic;
-    secureMnemonic.reserve(256);
-    if (!generate_mnemonic) {
-        if (IsInitialBlockDownload()) {
-            throw JSONRPCError(RPC_CLIENT_IN_INITIAL_DOWNLOAD, "Cannot set mnemonic while still in Initial Block Download");
-        }
-        secureMnemonic = request.params[0].get_str().c_str();
-    }
-
-    SecureString secureMnemonicPassphrase;
-    secureMnemonicPassphrase.reserve(256);
-    if (!request.params[1].isNull()) {
-        secureMnemonicPassphrase = request.params[1].get_str().c_str();
-    }
-
-    LogPrintf("Upgrading wallet to HD\n");
-    pwallet->SetMinVersion(FEATURE_HD);
-
-    if (prev_encrypted) {
-        if (!pwallet->GenerateNewHDChainEncrypted(secureMnemonic, secureMnemonicPassphrase, secureWalletPassphrase)) {
-            throw JSONRPCError(RPC_WALLET_ERROR, "Failed to generate encrypted HD wallet");
-        }
-    } else {
-        pwallet->GenerateNewHDChain(secureMnemonic, secureMnemonicPassphrase);
-        if (!secureWalletPassphrase.empty()) {
-            if (!pwallet->EncryptWallet(secureWalletPassphrase)) {
-                throw JSONRPCError(RPC_WALLET_ENCRYPTION_FAILED, "Failed to encrypt HD wallet");
-            }
-        }
-    }
-
-    // If you are generating new mnemonic it is assumed that the addresses have never gotten a transaction before, so you don't need to rescan for transactions
-    if (!generate_mnemonic) {
-        WalletRescanReserver reserver(pwallet);
-        if (!reserver.reserve()) {
-            throw JSONRPCError(RPC_WALLET_ERROR, "Wallet is currently rescanning. Abort existing rescan or wait.");
-        }
-        pwallet->ScanForWalletTransactions(chainActive.Genesis(), nullptr, reserver, true);
-    }
-
-    return true;
-}
-
-UniValue keepass(const JSONRPCRequest& request)
-{
-    std::shared_ptr<CWallet> const wallet = GetWalletForJSONRPCRequest(request);
-    CWallet* const pwallet = wallet.get();
-    if (!EnsureWalletIsAvailable(pwallet, request.fHelp))
-        return NullUniValue;
-
-    std::string strCommand;
-
-    if (!request.params[0].isNull())
-        strCommand = request.params[0].get_str();
-
-    if (request.fHelp  ||
-        (strCommand != "genkey" && strCommand != "init" && strCommand != "setpassphrase"))
-        throw std::runtime_error(
-            "keepass <genkey|init|setpassphrase>\n");
-
-    if (strCommand == "genkey")
-    {
-        SecureString sResult;
-        // Generate RSA key
-        SecureString sKey = CKeePassIntegrator::generateKeePassKey();
-        sResult = "Generated Key: ";
-        sResult += sKey;
-        return sResult.c_str();
-    }
-    else if(strCommand == "init")
-    {
-        // Generate base64 encoded 256 bit RSA key and associate with KeePassHttp
-        SecureString sResult;
-        SecureString sKey;
-        std::string strId;
-        keePassInt.rpcAssociate(strId, sKey);
-        sResult = "Association successful. Id: ";
-        sResult += strId.c_str();
-        sResult += " - Key: ";
-        sResult += sKey.c_str();
-        return sResult.c_str();
-    }
-    else if(strCommand == "setpassphrase")
-    {
-        if(request.params.size() != 2) {
-            return "setlogin: invalid number of parameters. Requires a passphrase";
-        }
-
-        SecureString sPassphrase = SecureString(request.params[1].get_str().c_str());
-
-        keePassInt.updatePassphrase(sPassphrase);
-
-        return "setlogin: Updated credentials.";
-    }
-
-    return "Invalid command";
 }
 
 static UniValue loadwallet(const JSONRPCRequest& request)
@@ -4158,7 +3975,7 @@ UniValue getaddressinfo(const JSONRPCRequest& request)
             "  \"account\" : \"account\"         (string) DEPRECATED. This field will be removed in V0.18. To see this deprecated field, start pacprotocold with -deprecatedrpc=accounts. The account associated with the address, \"\" is the default account\n"
             "  \"timestamp\" : timestamp,      (number, optional) The creation time of the key if available in seconds since epoch (Jan 1 1970 GMT)\n"
             "  \"hdkeypath\" : \"keypath\"       (string, optional) The HD keypath if the key is HD and available\n"
-            "  \"hdchainid\" : \"<hash>\"        (string, optional) The ID of the HD chain\n"
+            "  \"hdmasterid\" : \"<hash160>\"      (string, optional) The Hash160 of the HD seed\n"
             "  \"labels\"                      (object) Array of labels associated with the address.\n"
             "    [\n"
             "      { (json object of label data)\n"
@@ -4216,10 +4033,9 @@ UniValue getaddressinfo(const JSONRPCRequest& request)
     }
     if (meta) {
         ret.pushKV("timestamp", meta->nCreateTime);
-        CHDChain hdChainCurrent;
-        if (key_id && pwallet->mapHdPubKeys.count(*key_id) && pwallet->GetHDChain(hdChainCurrent)) {
-            ret.pushKV("hdkeypath", pwallet->mapHdPubKeys[*key_id].GetKeyPath());
-            ret.pushKV("hdchainid", hdChainCurrent.GetID().GetHex());
+        if (!meta->hdKeypath.empty()) {
+            ret.pushKV("hdkeypath", meta->hdKeypath);
+            ret.pushKV("hdmasterkeyid", meta->master_key_id.GetHex());
         }
     }
 
@@ -4346,8 +4162,6 @@ extern UniValue importprunedfunds(const JSONRPCRequest& request);
 extern UniValue removeprunedfunds(const JSONRPCRequest& request);
 extern UniValue importmulti(const JSONRPCRequest& request);
 extern UniValue rescanblockchain(const JSONRPCRequest& request);
-
-extern UniValue dumphdinfo(const JSONRPCRequest& request);
 extern UniValue importelectrumwallet(const JSONRPCRequest& request);
 
 static const CRPCCommand commands[] =
@@ -4396,7 +4210,6 @@ static const CRPCCommand commands[] =
     { "wallet",             "signmessage",                      &signmessage,                   {"address","message"} },
     { "wallet",             "signrawtransactionwithwallet",     &signrawtransactionwithwallet,  {"hexstring","prevtxs","sighashtype"} },
     { "wallet",             "unloadwallet",                     &unloadwallet,                  {"wallet_name"} },
-    { "wallet",             "upgradetohd",                      &upgradetohd,                   {"mnemonic", "mnemonicpassphrase", "walletpassphrase"} },
     { "wallet",             "walletlock",                       &walletlock,                    {} },
     { "wallet",             "walletpassphrasechange",           &walletpassphrasechange,        {"oldpassphrase","newpassphrase"} },
     { "wallet",             "walletpassphrase",                 &walletpassphrase,              {"passphrase","timeout","mixingonly"} },
@@ -4426,9 +4239,7 @@ static const CRPCCommand commands[] =
 #else
     { "hidden",             "generate",                         &generate,                      {"nblocks","maxtries"} }, // Hidden as it isn't functional, just an error to let people know if miner isn't compiled
 #endif //ENABLE_MINER
-    { "wallet",             "keepass",                  &keepass,                  {} },
     { "hidden",             "instantsendtoaddress",     &instantsendtoaddress,     {} },
-    { "wallet",             "dumphdinfo",               &dumphdinfo,               {} },
     { "wallet",             "importelectrumwallet",     &importelectrumwallet,     {"filename", "index"} },
 };
 

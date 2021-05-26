@@ -46,14 +46,20 @@ isminetype IsMine(const CKeyStore &keystore, const CScript& scriptPubKey)
         break;
     case TX_PUBKEY:
         keyID = CPubKey(vSolutions[0]).GetID();
-        if (keystore.HaveKey(keyID))
+        if (keystore.HaveKey(keyID)) {
             return ISMINE_SPENDABLE;
+        } else if (keystore.HaveHardwareKey(keyID)) {
+            return HW_DEVICE;
+        }
         break;
     case TX_PUBKEYHASH:
+    {
         keyID = CKeyID(uint160(vSolutions[0]));
-        if (keystore.HaveKey(keyID))
+        if (keystore.HaveKey(keyID) || keystore.HaveHardwareKey(keyID)) {
             return ISMINE_SPENDABLE;
+        }
         break;
+    }
     case TX_SCRIPTHASH:
     {
         CScriptID scriptID = CScriptID(uint160(vSolutions[0]));
@@ -82,7 +88,7 @@ isminetype IsMine(const CKeyStore &keystore, const CScript& scriptPubKey)
     if (keystore.HaveWatchOnly(scriptPubKey)) {
         // TODO: This could be optimized some by doing some work after the above solver
         SignatureData sigs;
-        return ProduceSignature(DummySignatureCreator(&keystore), scriptPubKey, sigs) ? ISMINE_WATCH_SOLVABLE : ISMINE_WATCH_UNSOLVABLE;
+        return ProduceSignature(keystore, DummySignatureCreator(), scriptPubKey, sigs) ? ISMINE_WATCH_SOLVABLE : ISMINE_WATCH_UNSOLVABLE;
     }
     return ISMINE_NO;
 }

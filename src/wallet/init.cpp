@@ -3,8 +3,8 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include <extwallet/device.h>
 #include <init.h>
-#include <keepass.h>
 #include <net.h>
 #include <scheduler.h>
 #include <util.h>
@@ -19,6 +19,8 @@
 #include <coinjoin/coinjoin-client-options.h>
 
 #include <functional>
+
+int GetKeypoolSize(bool external);
 
 class WalletInit : public WalletInitInterface {
 public:
@@ -55,7 +57,6 @@ public:
     // Dash Specific Wallet Init
     void AutoLockMasternodeCollaterals() const override;
     void InitCoinJoinSettings() const override;
-    void InitKeePass() const override;
     bool InitAutoBackup() const override;
 };
 
@@ -66,7 +67,7 @@ void WalletInit::AddWalletOptions() const
     gArgs.AddArg("-createwalletbackups=<n>", strprintf("Number of automatic wallet backups (default: %u)", nWalletBackups), false, OptionsCategory::WALLET);
     gArgs.AddArg("-disablewallet", "Do not load the wallet and disable wallet RPC calls", false, OptionsCategory::WALLET);
     gArgs.AddArg("-instantsendnotify=<cmd>", "Execute command when a wallet InstantSend transaction is successfully locked (%s in cmd is replaced by TxID)", false, OptionsCategory::WALLET);
-    gArgs.AddArg("-keypool=<n>", strprintf("Set key pool size to <n> (default: %u)", DEFAULT_KEYPOOL_SIZE), false, OptionsCategory::WALLET);
+    gArgs.AddArg("-keypool=<n>", strprintf("Set key pool size to <n> (default: %u)", GetKeypoolSize(false)), false, OptionsCategory::WALLET);
     gArgs.AddArg("-rescan=<mode>", "Rescan the block chain for missing wallet transactions on startup"
                                             " (1 = start from wallet creation time, 2 = start from genesis block)", false, OptionsCategory::WALLET);
     gArgs.AddArg("-salvagewallet", "Attempt to recover private keys from a corrupt wallet on startup", false, OptionsCategory::WALLET);
@@ -95,12 +96,6 @@ void WalletInit::AddWalletOptions() const
     gArgs.AddArg("-mnemonic=<text>", "User defined mnemonic for HD wallet (bip39). Only has effect during wallet creation/first start (default: randomly generated)", false, OptionsCategory::WALLET_HD);
     gArgs.AddArg("-mnemonicpassphrase=<text>", "User defined mnemonic passphrase for HD wallet (BIP39). Only has effect during wallet creation/first start (default: empty string)", false, OptionsCategory::WALLET_HD);
     gArgs.AddArg("-usehd", strprintf("Use hierarchical deterministic key generation (HD) after BIP39/BIP44. Only has effect during wallet creation/first start (default: %u)", DEFAULT_USE_HD_WALLET), false, OptionsCategory::WALLET_HD);
-
-    gArgs.AddArg("-keepass", strprintf("Use KeePass 2 integration using KeePassHttp plugin (default: %u)", 0), false, OptionsCategory::WALLET_KEEPASS);
-    gArgs.AddArg("-keepassid=<id>", "KeePassHttp id for the established association", false, OptionsCategory::WALLET_KEEPASS);
-    gArgs.AddArg("-keepasskey=<key>", "KeePassHttp key for AES encrypted communication with KeePass", false, OptionsCategory::WALLET_KEEPASS);
-    gArgs.AddArg("-keepassname=<name>", "Name to construct url for KeePass entry that stores the wallet passphrase", false, OptionsCategory::WALLET_KEEPASS);
-    gArgs.AddArg("-keepassport=<port>", strprintf("Connect to KeePassHttp on port <port> (default: %u)", DEFAULT_KEEPASS_HTTP_PORT), false, OptionsCategory::WALLET_KEEPASS);
 
     gArgs.AddArg("-enablecoinjoin", strprintf("Enable use of CoinJoin for funds stored in this wallet (0-1, default: %u)", 0), false, OptionsCategory::WALLET_COINJOIN);
     gArgs.AddArg("-coinjoinamount=<n>", strprintf("Target CoinJoin balance (%u-%u, default: %u)", MIN_COINJOIN_AMOUNT, MAX_COINJOIN_AMOUNT, DEFAULT_COINJOIN_AMOUNT), false, OptionsCategory::WALLET_COINJOIN);
@@ -395,8 +390,22 @@ bool WalletInit::Open() const
         return true;
     }
 
-    for (const std::string& walletFile : gArgs.GetArgs("-wallet")) {
-        std::shared_ptr<CWallet> pwallet = CWallet::CreateWalletFromFile(WalletLocation(walletFile));
+    //! decide whether we're using file or memory-based wallet
+    bool extWallet = extWalletState == PRESENT;
+
+    if (!extWallet) {
+        //! create wallet.dat as normal
+        for (const std::string& walletFile : gArgs.GetArgs("-wallet")) {
+            std::shared_ptr<CWallet> pwallet = CWallet::CreateWalletFromFile(WalletLocation(walletFile));
+            if (!pwallet) {
+                return false;
+            }
+        }
+    }
+    else
+    {
+        //! create memory-based wallet deterministically
+        std::shared_ptr<CWallet> pwallet =  CWallet::CreateWalletInMemory();
         if (!pwallet) {
             return false;
         }
@@ -474,11 +483,6 @@ void WalletInit::InitCoinJoinSettings() const
               CCoinJoinClientOptions::GetSessions(), CCoinJoinClientOptions::GetRounds(),
               CCoinJoinClientOptions::GetAmount(), CCoinJoinClientOptions::GetDenomsGoal(),
               CCoinJoinClientOptions::GetDenomsHardCap());
-}
-
-void WalletInit::InitKeePass() const
-{
-    keePassInt.init();
 }
 
 bool WalletInit::InitAutoBackup() const

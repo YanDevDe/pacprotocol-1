@@ -6,9 +6,9 @@
 #ifndef BITCOIN_KEYSTORE_H
 #define BITCOIN_KEYSTORE_H
 
-#include <hdchain.h>
 #include <key.h>
 #include <pubkey.h>
+#include <script/ismine.h>
 #include <script/script.h>
 #include <script/sign.h>
 #include <script/standard.h>
@@ -25,7 +25,9 @@ public:
 
     //! Check whether a key corresponding to a given address is present in the store.
     virtual bool HaveKey(const CKeyID &address) const =0;
+    virtual bool HaveHardwareKey(const CKeyID &address) const =0;
     virtual std::set<CKeyID> GetKeys() const =0;
+    virtual bool GetPubKey(const CKeyID &address, CPubKey& pubkeyOut) const =0;
 
     //! Support for BIP 0013 : see https://github.com/bitcoin/bips/blob/master/bip-0013.mediawiki
     virtual bool AddCScript(const CScript& redeemScript) =0;
@@ -54,14 +56,13 @@ protected:
     WatchKeyMap mapWatchKeys GUARDED_BY(cs_KeyStore);
     ScriptMap mapScripts GUARDED_BY(cs_KeyStore);
     WatchOnlySet setWatchOnly GUARDED_BY(cs_KeyStore);
-    /* the HD chain data model*/
-    CHDChain hdChain GUARDED_BY(cs_KeyStore);
 
 public:
     bool AddKeyPubKey(const CKey& key, const CPubKey &pubkey) override;
     bool AddKey(const CKey &key) { return AddKeyPubKey(key, key.GetPubKey()); }
     bool GetPubKey(const CKeyID &address, CPubKey& vchPubKeyOut) const override;
     bool HaveKey(const CKeyID &address) const override;
+    bool HaveHardwareKey(const CKeyID &address) const override;
     std::set<CKeyID> GetKeys() const override;
     bool GetKey(const CKeyID &address, CKey &keyOut) const override;
     bool AddCScript(const CScript& redeemScript) override;
@@ -73,8 +74,12 @@ public:
     bool RemoveWatchOnly(const CScript &dest) override;
     bool HaveWatchOnly(const CScript &dest) const override;
     bool HaveWatchOnly() const override;
-
-    virtual bool GetHDChain(CHDChain& hdChainRet) const;
 };
+
+/** Return the CKeyID of the key involved in a script (if there is a unique one). */
+CKeyID GetKeyForDestination(const CKeyStore& store, const CTxDestination& dest);
+
+/** Checks if a CKey is in the given CKeyStore compressed or otherwise*/
+bool HaveKey(const CKeyStore& store, const CKey& key);
 
 #endif // BITCOIN_KEYSTORE_H

@@ -109,17 +109,12 @@ public:
     }
 };
 
-bool EncryptAES256(const SecureString& sKey, const SecureString& sPlaintext, const std::string& sIV, std::string& sCiphertext);
-bool DecryptAES256(const SecureString& sKey, const std::string& sCiphertext, const std::string& sIV, SecureString& sPlaintext);
-
-
 /** Keystore which keeps the private keys encrypted.
  * It derives from the basic key store, which is used if no encryption is active.
  */
 class CCryptoKeyStore : public CBasicKeyStore
 {
 private:
-    CHDChain cryptedHDChain GUARDED_BY(cs_KeyStore);
 
     CKeyingMaterial vMasterKey GUARDED_BY(cs_KeyStore);
 
@@ -141,11 +136,6 @@ protected:
     //! will encrypt previously unencrypted keys
     bool EncryptKeys(CKeyingMaterial& vMasterKeyIn);
 
-    bool EncryptHDChain(const CKeyingMaterial& vMasterKeyIn, const CHDChain& chain = CHDChain());
-    bool DecryptHDChain(CHDChain& hdChainRet) const;
-    bool SetHDChain(const CHDChain& chain);
-    bool SetCryptedHDChain(const CHDChain& chain);
-
     bool Unlock(const CKeyingMaterial& vMasterKeyIn, bool fForMixingOnly = false);
     CryptedKeyMap mapCryptedKeys GUARDED_BY(cs_KeyStore);
 
@@ -164,8 +154,6 @@ public:
     bool GetKey(const CKeyID &address, CKey& keyOut) const override;
     bool GetPubKey(const CKeyID &address, CPubKey& vchPubKeyOut) const override;
     std::set<CKeyID> GetKeys() const override;
-
-    virtual bool GetHDChain(CHDChain& hdChainRet) const override;
 
     /**
      * Wallet status (encrypted, locked) changed.

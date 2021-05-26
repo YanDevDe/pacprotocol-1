@@ -19,6 +19,8 @@
 #include <qt/rpcconsole.h>
 #include <qt/utilitydialog.h>
 
+#include <extwallet/device.h>
+
 #ifdef ENABLE_WALLET
 #include <qt/walletframe.h>
 #include <qt/walletmodel.h>
@@ -766,6 +768,8 @@ void BitcoinGUI::setClientModel(ClientModel *_clientModel)
         // Receive and report messages from client model
         connect(_clientModel, SIGNAL(message(QString,QString,unsigned int)), this, SLOT(message(QString,QString,unsigned int)));
 
+        connect(_clientModel, SIGNAL(waitingForDevice(bool)), this, SLOT(waitingForDevice(bool)));
+
         // Show progress dialog
         connect(_clientModel, SIGNAL(showProgress(QString,int)), this, SLOT(showProgress(QString,int)));
 
@@ -1496,6 +1500,25 @@ void BitcoinGUI::message(const QString &title, const QString &message, unsigned 
         notificator->notify(static_cast<Notificator::Class>(nNotifyIcon), strTitle, message);
 }
 
+// Waiting for hardware device
+void BitcoinGUI::waitingForDevice(bool fCompleted)
+{
+    if (!fCompleted)
+    {
+        mbDevice.setText("Waiting for device.");
+        mbDevice.setWindowFlags(mbDevice.windowFlags() | Qt::WindowStaysOnTopHint);
+        mbDevice.show();
+        mbDevice.raise();
+        mbDevice.activateWindow();
+        MilliSleep(100);
+        qApp->processEvents();
+    } else
+    {
+        if (mbDevice.isVisible())
+            mbDevice.hide();
+    };
+};
+
 void BitcoinGUI::changeEvent(QEvent *e)
 {
     QMainWindow::changeEvent(e);
@@ -1700,11 +1723,16 @@ bool BitcoinGUI::handlePaymentRequest(const SendCoinsRecipient& recipient)
 
 void BitcoinGUI::setHDStatus(int hdEnabled)
 {
-    if (hdEnabled) {
-        labelWalletHDStatusIcon->setPixmap(GUIUtil::getIcon("hd_enabled", GUIUtil::ThemedColor::GREEN).pixmap(STATUSBAR_ICONSIZE, STATUSBAR_ICONSIZE));
-        labelWalletHDStatusIcon->setToolTip(tr("HD key generation is <b>enabled</b>"));
+    if (extWalletState == PRESENT) {
+        labelWalletHDStatusIcon->setPixmap(GUIUtil::getIcon("ledger_enabled", GUIUtil::ThemedColor::BLACK).pixmap(STATUSBAR_ICONSIZE, STATUSBAR_ICONSIZE));
+        labelWalletHDStatusIcon->setToolTip(tr("Hardware wallet is <b>enabled</b>"));
+    } else {
+        if (hdEnabled) {
+            labelWalletHDStatusIcon->setPixmap(GUIUtil::getIcon("hd_enabled", GUIUtil::ThemedColor::GREEN).pixmap(STATUSBAR_ICONSIZE, STATUSBAR_ICONSIZE));
+            labelWalletHDStatusIcon->setToolTip(tr("HD key generation is <b>enabled</b>"));
+        }
     }
-    labelWalletHDStatusIcon->setVisible(hdEnabled);
+    labelWalletHDStatusIcon->setVisible(hdEnabled || extWalletState);
 }
 
 void BitcoinGUI::setStakingStatus()

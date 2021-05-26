@@ -8,7 +8,6 @@
 
 #include <amount.h>
 #include <wallet/db.h>
-#include <hdchain.h>
 #include <key.h>
 
 #include <list>
@@ -57,12 +56,64 @@ enum class DBErrors
     NEED_REWRITE
 };
 
+/* simple HD chain data model */
+class CHDChain
+{
+public:
+    uint32_t nExternalChainCounter;
+    uint32_t nInternalChainCounter;
+    CKeyID seed_id; //!< seed hash160
+    CKeyID master_key_id; //!< master key hash160
+    std::vector<CExtPubKey> account_pubkeys; //!< BIP44 account pubkey
+    bool is_hardware_device;
+
+    static const int VERSION_HD_BASE        = 1;
+    static const int VERSION_HD_CHAIN_SPLIT = 2;
+    static const int VERSION_HD_HW_WALLET   = 3;
+    static const int CURRENT_VERSION        = VERSION_HD_HW_WALLET;
+    int nVersion;
+
+    CHDChain() { SetNull(); }
+    ADD_SERIALIZE_METHODS;
+    template <typename Stream, typename Operation>
+    inline void SerializationOp(Stream& s, Operation ser_action)
+    {
+        READWRITE(this->nVersion);
+        READWRITE(nExternalChainCounter);
+        READWRITE(seed_id);
+        if (this->nVersion >= VERSION_HD_CHAIN_SPLIT)
+            READWRITE(nInternalChainCounter);
+        if (this->nVersion >= VERSION_HD_HW_WALLET) {
+            READWRITE(master_key_id);
+            READWRITE(account_pubkeys);
+            READWRITE(is_hardware_device);
+        }
+    }
+
+    void SetNull()
+    {
+        nVersion = CHDChain::CURRENT_VERSION;
+        nExternalChainCounter = 0;
+        nInternalChainCounter = 0;
+        seed_id.SetNull();
+        master_key_id.SetNull();
+        account_pubkeys.clear();
+        is_hardware_device = false;
+    }
+};
+
 class CKeyMetadata
 {
 public:
-    static const int CURRENT_VERSION=1;
+    static const int VERSION_BASIC=1;
+    static const int VERSION_WITH_HDDATA=10;
+    static const int VERSION_WITH_MASTER_ID=11;
+    static const int CURRENT_VERSION=VERSION_WITH_MASTER_ID;
     int nVersion;
     int64_t nCreateTime; // 0 means unknown
+    std::string hdKeypath; //optional HD/bip32 keypath
+    CKeyID hd_seed_id; //!< seed hash160
+    CKeyID master_key_id; //!< master key hash160
 
     CKeyMetadata()
     {
@@ -80,12 +131,24 @@ public:
     inline void SerializationOp(Stream& s, Operation ser_action) {
         READWRITE(this->nVersion);
         READWRITE(nCreateTime);
+        if (this->nVersion >= VERSION_WITH_HDDATA)
+        {
+            READWRITE(hdKeypath);
+            READWRITE(hd_seed_id);
+        }
+        if (this->nVersion >= VERSION_WITH_MASTER_ID)
+        {
+            READWRITE(master_key_id);
+        }
     }
 
     void SetNull()
     {
         nVersion = CKeyMetadata::CURRENT_VERSION;
         nCreateTime = 0;
+        hdKeypath.clear();
+        hd_seed_id.SetNull();
+        master_key_id.SetNull();
     }
 };
 
@@ -135,7 +198,7 @@ public:
     bool WriteTx(const CWalletTx& wtx);
     bool EraseTx(uint256 hash);
 
-    bool WriteKeyMeta(const CPubKey& vchPubKey, const CKeyMetadata &keyMeta);
+    bool WriteKeyMeta(const CPubKey& vchPubKey, const CKeyMetadata& keyMeta, bool overwrite = true);
 
     bool WriteKey(const CPubKey& vchPubKey, const CPrivKey& vchPrivKey, const CKeyMetadata &keyMeta);
     bool WriteCryptedKey(const CPubKey& vchPubKey, const std::vector<unsigned char>& vchCryptedSecret, const CKeyMetadata &keyMeta);
@@ -197,9 +260,8 @@ public:
 
     //! write the hdchain model (external chain child index counter)
     bool WriteHDChain(const CHDChain& chain);
-    bool WriteCryptedHDChain(const CHDChain& chain);
-    bool WriteHDPubKey(const CHDPubKey& hdPubKey, const CKeyMetadata& keyMeta);
 
+    bool WriteWalletFlags(const uint64_t flags);
     //! Begin a new transaction
     bool TxnBegin();
     //! Commit current transaction

@@ -215,6 +215,7 @@ RES_ICONS = \
   qt/res/icons/eye_minus.png \
   qt/res/icons/eye_plus.png \
   qt/res/icons/hd_enabled.png \
+  qt/res/icons/ledger_enabled.png \
   qt/res/icons/lock_closed.png \
   qt/res/icons/lock_open.png \
   qt/res/icons/remove.png \

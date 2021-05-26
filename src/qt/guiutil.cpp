@@ -141,6 +141,7 @@ static std::set<QWidget*> setRectsDisabled;
 
 static const std::map<ThemedColor, QColor> themedColors = {
     { ThemedColor::DEFAULT, QColor(85, 85, 85) },
+    { ThemedColor::BLACK, QColor(0, 0, 0) },
     { ThemedColor::UNCONFIRMED, QColor(128, 128, 128) },
     { ThemedColor::BLUE, QColor(0, 141, 228) },
     { ThemedColor::ORANGE, QColor(199, 147, 4) },
@@ -158,6 +159,7 @@ static const std::map<ThemedColor, QColor> themedColors = {
 
 static const std::map<ThemedColor, QColor> themedDarkColors = {
     { ThemedColor::DEFAULT, QColor(199, 199, 199) },
+    { ThemedColor::BLACK, QColor(0, 0, 0) },
     { ThemedColor::UNCONFIRMED, QColor(170, 170, 170) },
     { ThemedColor::BLUE, QColor(0, 89, 154) },
     { ThemedColor::ORANGE, QColor(199, 147, 4) },

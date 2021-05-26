@@ -9,6 +9,9 @@ class CBasicKeyStore;
 struct CMutableTransaction;
 class UniValue;
 
+/** Make this non-static so we can hit it from usb rpc functions */
+void TxInErrorToJSON(const CTxIn& txin, UniValue& vErrorsRet, const std::string& strMessage);
+
 /** Sign a transaction with the given keystore and previous transactions */
 UniValue SignTransaction(CMutableTransaction& mtx, const UniValue& prevTxs, CBasicKeyStore *keystore, bool tempKeystore, const UniValue& hashType);
 

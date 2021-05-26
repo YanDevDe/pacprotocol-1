@@ -437,6 +437,11 @@ class NodeImpl : public Node
                 fn(nSyncProgress);
             }));
     }
+    std::unique_ptr<Handler> handleNotifyWaitingForDevice(WaitingForDeviceFn fn) override
+    {
+        return MakeHandler(
+            ::uiInterface.NotifyWaitingForDevice.connect(fn));
+    }
 };
 
 } // namespace

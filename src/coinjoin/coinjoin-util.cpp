@@ -131,7 +131,7 @@ CTransactionBuilder::CTransactionBuilder(std::shared_ptr<CWallet> pwalletIn, con
         LOCK(pwallet->cs_wallet);
         WalletBatch dummyBatch(pwallet->GetDBHandle(), "r+", false);
         dummyBatch.TxnBegin();
-        CPubKey dummyPubkey = pwallet->GenerateNewKey(dummyBatch, 0, false);
+        CPubKey dummyPubkey = pwallet->GenerateNewKey(dummyBatch, false);
         dummyBatch.TxnAbort();
         dummyScript = ::GetScriptForDestination(dummyPubkey.GetID());
         // Create dummy signatures for all inputs
@@ -139,7 +139,7 @@ CTransactionBuilder::CTransactionBuilder(std::shared_ptr<CWallet> pwalletIn, con
         for (const auto& coin : tallyItem.vecInputCoins) {
             const CScript& scriptPubKey = coin.txout.scriptPubKey;
             SignatureData sigdata;
-            bool res = ProduceSignature(DummySignatureCreator(pwallet.get()), scriptPubKey, sigdata);
+            bool res = ProduceSignature(*pwallet, DummySignatureCreator(), scriptPubKey, sigdata);
             assert(res);
             UpdateTransaction(dummyTx, nIn, sigdata);
             nIn++;

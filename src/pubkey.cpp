@@ -166,6 +166,11 @@ static int ecdsa_signature_parse_der_lax(const secp256k1_context* ctx, secp256k1
     return 1;
 }
 
+CKeyID::CKeyID(const uint256& in)
+{
+    CRIPEMD160().Write(in.begin(), 32).Finalize(this->begin());
+};
+
 bool CPubKey::Verify(const uint256 &hash, const std::vector<unsigned char>& vchSig) const {
     if (!IsValid())
         return false;
@@ -220,6 +225,20 @@ bool CPubKey::Decompress() {
     unsigned char pub[PUBLIC_KEY_SIZE];
     size_t publen = PUBLIC_KEY_SIZE;
     secp256k1_ec_pubkey_serialize(secp256k1_context_verify, pub, &publen, &pubkey, SECP256K1_EC_UNCOMPRESSED);
+    Set(pub, pub + publen);
+    return true;
+}
+
+bool CPubKey::Compress() {
+    if (!IsValid())
+        return false;
+    secp256k1_pubkey pubkey;
+    if (!secp256k1_ec_pubkey_parse(secp256k1_context_verify, &pubkey, vch, size())) {
+        return false;
+    }
+    unsigned char pub[PUBLIC_KEY_SIZE];
+    size_t publen = PUBLIC_KEY_SIZE;
+    secp256k1_ec_pubkey_serialize(secp256k1_context_verify, pub, &publen, &pubkey, SECP256K1_EC_COMPRESSED);
     Set(pub, pub + publen);
     return true;
 }
