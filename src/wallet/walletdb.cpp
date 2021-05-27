@@ -460,7 +460,7 @@ ReadKeyValue(CWallet* pwallet, CDataStream& ssKey, CDataStream& ssValue,
             CKeyMetadata keyMeta;
             ssValue >> keyMeta;
             wss.nKeyMeta++;
-            pwallet->LoadKeyMetadata(vchPubKey, keyMeta);
+            pwallet->LoadKeyMetadata(vchPubKey.GetID(), keyMeta);
         }
         else if (strType == "watchmeta")
         {
@@ -658,6 +658,14 @@ DBErrors WalletBatch::LoadWallet(CWallet* pwallet)
     ListAccountCreditDebit("*", pwallet->laccentries);
     for (CAccountingEntry& entry : pwallet->laccentries) {
         pwallet->wtxOrdered.insert(make_pair(entry.nOrderPos, CWallet::TxPair(nullptr, &entry)));
+    }
+
+    // Upgrade all of the wallet keymetadata to have the hd master key id
+    // This operation is not atomic, but if it fails, updated entries are still backwards compatible with older software
+    try {
+        pwallet->UpgradeKeyMetadata();
+    } catch (...) {
+        result = DBErrors::CORRUPT;
     }
 
     return result;

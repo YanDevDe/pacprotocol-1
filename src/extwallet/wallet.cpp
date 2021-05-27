@@ -2,10 +2,14 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include <core_io.h>
 #include <ui_interface.h>
 #include <extwallet/device.h>
 #include <extwallet/extkey.h>
+#include <txmempool.h>
 #include <util.h>
+#include <wallet/extsigner.h>
+#include <wallet/rpcwallet.h>
 #include <wallet/wallet.h>
 
 std::shared_ptr<CWallet> CWallet::CreateWalletInMemory()
@@ -70,3 +74,49 @@ std::shared_ptr<CWallet> CWallet::CreateWalletInMemory()
     return walletInstance;
 }
 
+bool CWallet::ConvertToPSBT(std::string& rawHexTx, std::string& b64Psbt)
+{
+    const CBlockIndex* pindex = chainActive.Tip();
+
+    //! Decode to hexstring
+    CMutableTransaction tx;
+    if (!DecodeHexTx(tx, rawHexTx)) {
+        return false;
+    }
+
+    for (CTxIn& input : tx.vin) {
+        input.scriptSig.clear();
+    }
+
+    //! Create the PSBT
+    PartiallySignedTransaction psbtx;
+    psbtx.tx = tx;
+
+    for (unsigned int i = 0; i < tx.vin.size(); ++i) {
+        psbtx.inputs.push_back(PSBTInput());
+    }
+
+    for (unsigned int i = 0; i < tx.vout.size(); ++i) {
+        psbtx.outputs.push_back(PSBTOutput());
+    }
+
+    // Fill the inputs
+    for (unsigned int i = 0; i < psbtx.tx->vin.size(); ++i) {
+        PSBTInput& input = psbtx.inputs[i];
+        uint256 blockHash;
+        CTransactionRef stx;
+        if (!GetTransaction(psbtx.tx->vin[i].prevout.hash, stx, Params().GetConsensus(), blockHash)) {
+            LogPrintf("%s - couldnt retrieve tx %s\n", __func__, psbtx.tx->vin[i].prevout.hash.ToString());
+            return false;
+        }
+        input.non_witness_utxo = stx;
+    }
+
+    // Serialize the PSBT
+    CDataStream ssTx(SER_NETWORK, PROTOCOL_VERSION);
+    ssTx << psbtx;
+
+    b64Psbt = EncodeBase64((unsigned char*)ssTx.data(), ssTx.size());
+
+    return true;
+}

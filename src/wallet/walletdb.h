@@ -7,6 +7,7 @@
 #define BITCOIN_WALLET_WALLETDB_H
 
 #include <amount.h>
+#include <script/sign.h>
 #include <wallet/db.h>
 #include <key.h>
 
@@ -107,13 +108,14 @@ class CKeyMetadata
 public:
     static const int VERSION_BASIC=1;
     static const int VERSION_WITH_HDDATA=10;
-    static const int VERSION_WITH_MASTER_ID=11;
-    static const int CURRENT_VERSION=VERSION_WITH_MASTER_ID;
+    static const int VERSION_WITH_KEY_ORIGIN = 12;
+    static const int CURRENT_VERSION=VERSION_WITH_KEY_ORIGIN;
     int nVersion;
     int64_t nCreateTime; // 0 means unknown
     std::string hdKeypath; //optional HD/bip32 keypath
     CKeyID hd_seed_id; //!< seed hash160
-    CKeyID master_key_id; //!< master key hash160
+    KeyOriginInfo key_origin; // Key origin info with path and fingerprint
+    bool has_key_origin = false; //< Whether the key_origin is useful
 
     CKeyMetadata()
     {
@@ -136,9 +138,10 @@ public:
             READWRITE(hdKeypath);
             READWRITE(hd_seed_id);
         }
-        if (this->nVersion >= VERSION_WITH_MASTER_ID)
+        if (this->nVersion >= VERSION_WITH_KEY_ORIGIN)
         {
-            READWRITE(master_key_id);
+            READWRITE(key_origin);
+            READWRITE(has_key_origin);
         }
     }
 
@@ -148,7 +151,8 @@ public:
         nCreateTime = 0;
         hdKeypath.clear();
         hd_seed_id.SetNull();
-        master_key_id.SetNull();
+        key_origin.clear();
+        has_key_origin = false;
     }
 };
 

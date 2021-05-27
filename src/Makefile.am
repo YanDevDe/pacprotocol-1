@@ -236,6 +236,7 @@ BITCOIN_CORE_H = \
   saltedhasher.h \
   scheduler.h \
   script/ismine.h \
+  script/keyorigin.h \
   script/sigcache.h \
   script/sign.h \
   script/standard.h \
@@ -271,6 +272,7 @@ BITCOIN_CORE_H = \
   wallet/coincontrol.h \
   wallet/crypter.h \
   wallet/db.h \
+  wallet/extsigner.h \
   wallet/fees.h \
   wallet/rpcwallet.h \
   wallet/wallet.h \
@@ -413,6 +415,7 @@ libdash_wallet_a_SOURCES = \
   interfaces/wallet.cpp \
   wallet/crypter.cpp \
   wallet/db.cpp \
+  wallet/extsigner.cpp \
   wallet/fees.cpp \
   wallet/init.cpp \
   wallet/rpcdump.cpp \

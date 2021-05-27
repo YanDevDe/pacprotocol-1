@@ -72,7 +72,6 @@ bool InitWithExtendedPubkey(CPubKey& master_key, std::vector<CExtPubKey>& acctKe
     metadata.hdKeypath = path_string;
     acctKeys.push_back(acctKey);
     acctKeyMetadata.push_back(metadata);
-
     master_key = acctKey.pubkey;
 
     if (debugMode) {

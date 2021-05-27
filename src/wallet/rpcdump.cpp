@@ -7,6 +7,7 @@
 #include <rpc/server.h>
 #include <validation.h>
 #include <key_io.h>
+#include <rpc/rawtransaction.h>
 #include <script/script.h>
 #include <script/standard.h>
 #include <sync.h>
@@ -898,7 +899,7 @@ UniValue dumpwallet(const JSONRPCRequest& request)
             } else {
                 file << "change=1";
             }
-            file << strprintf(" # addr=%s%s\n", strAddr, (pwallet->mapKeyMetadata[keyid].hdKeypath.size() > 0 ? " hdkeypath="+pwallet->mapKeyMetadata[keyid].hdKeypath : ""));
+            file << strprintf(" # addr=%s%s\n", strAddr, (pwallet->mapKeyMetadata[keyid].has_key_origin ? " hdkeypath="+WriteHDKeypath(pwallet->mapKeyMetadata[keyid].key_origin.path) : ""));
         }
     }}
     file << "\n";

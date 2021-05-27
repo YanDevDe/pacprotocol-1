@@ -11,6 +11,7 @@
 #include <wallet/coinselection.h>
 #include <consensus/consensus.h>
 #include <consensus/validation.h>
+#include <core_io.h>
 #include <fs.h>
 #include <init.h>
 #include <extwallet/extkey.h>
@@ -30,6 +31,7 @@
 #include <txmempool.h>
 #include <utilmoneystr.h>
 #include <wallet/fees.h>
+#include <wallet/extsigner.h>
 
 #include <coinjoin/coinjoin-client.h>
 #include <coinjoin/coinjoin-client-options.h>
@@ -194,7 +196,6 @@ const CWalletTx* CWallet::GetWalletTx(const uint256& hash) const
 
 CPubKey CWallet::GenerateNewKey(WalletBatch &batch, bool internal)
 {
-    assert(!IsWalletFlagSet(WALLET_FLAG_DISABLE_PRIVATE_KEYS));
     AssertLockHeld(cs_wallet); // mapKeyMetadata
     bool fCompressed = CanSupportFeature(FEATURE_COMPRPUBKEY); // default to compressed public keys if we want 0.6.0 wallets
 
@@ -285,6 +286,8 @@ void CWallet::DeriveChildKeyFromXpub(WalletBatch &batch, CKeyMetadata& metadata,
     AssertLockHeld(cs_wallet); // mapKeyMetadata
     assert(!hdChain.account_pubkeys.empty());
 
+    int bip44_id = Params().BIP44ID();
+
     CExtPubKey masterKey = hdChain.account_pubkeys[0]; // contains pubkey @ 44'/8192'/0'
     CExtPubKey accountKey;                             // contains pubkey @ 44'/8192'/0'/0
     CExtPubKey childKey;                               // contains pubkey @ 44'/8192'/0'/0/<n>
@@ -292,7 +295,6 @@ void CWallet::DeriveChildKeyFromXpub(WalletBatch &batch, CKeyMetadata& metadata,
     // Create new metadata
     int64_t nCreationTime = GetTime();
     metadata.hd_seed_id = hdChain.seed_id;
-    metadata.master_key_id = hdChain.master_key_id;
 
     //! derive accountKey @ 44'/8192'/0'/0
     masterKey.Derive(accountKey, 0);
@@ -300,12 +302,16 @@ void CWallet::DeriveChildKeyFromXpub(WalletBatch &batch, CKeyMetadata& metadata,
     // derive child key at next index
     do {
         accountKey.Derive(childKey, hdChain.nExternalChainCounter);
-        metadata.hdKeypath = GetDefaultAccountPath() + "/0/" + std::to_string(hdChain.nExternalChainCounter);
+        metadata.hdKeypath = "m/0/" + std::to_string(hdChain.nExternalChainCounter);
+        metadata.key_origin.path.push_back(0);
+        metadata.key_origin.path.push_back(hdChain.nExternalChainCounter);
+        metadata.has_key_origin = true;
         hdChain.nExternalChainCounter++;
     } while (HaveHardwareKey(childKey.pubkey.GetID()));
 
     outKey = childKey.pubkey;
-    std::string initStatus = "path: " + metadata.hdKeypath + " pubkey: " + EncodeDestination(outKey.GetID());
+    memcpy(metadata.key_origin.fingerprint, masterKey.vchFingerprint, 4);
+    std::string initStatus = "fingerprint: " + metadata.key_origin.PrintFingerprint() + " path: " + metadata.hdKeypath + " pubkey: " + EncodeDestination(outKey.GetID());
     LogPrintf("%s - %s\n", __func__, initStatus);
 
     mapKeyMetadata[outKey.GetID()] = metadata;
@@ -394,21 +400,10 @@ bool CWallet::HaveHardwareKey(const CKeyID &address) const
     // master key is generated on the fly when needed (see `DeriveNewChildKey`).
     LOCK(cs_wallet);
     const auto it = mapKeyMetadata.find(address);
-    if (it != mapKeyMetadata.end() && !it->second.master_key_id.IsNull()) {
+    if (it != mapKeyMetadata.end()) {
         return true;
     }
     return false;
-}
-
-void CWallet::LoadKeyMetadata(const CPubKey& pubkey, const CKeyMetadata &meta)
-{
-    AssertLockHeld(cs_wallet); // mapKeyMetadata
-    CKeyID keyID = pubkey.GetID();
-    if (!meta.master_key_id.IsNull()) {
-        LOCK(cs_KeyStore);
-        mapWatchKeys[pubkey.GetID()] = pubkey;
-    }
-    LoadKeyMetadata(keyID, meta);
 }
 
 void CWallet::LoadKeyMetadata(const CKeyID& keyID, const CKeyMetadata &meta)
@@ -423,6 +418,42 @@ void CWallet::LoadScriptMetadata(const CScriptID& script_id, const CKeyMetadata 
     AssertLockHeld(cs_wallet); // m_script_metadata
     UpdateTimeFirstKey(meta.nCreateTime);
     m_script_metadata[script_id] = meta;
+}
+
+void CWallet::UpgradeKeyMetadata()
+{
+    AssertLockHeld(cs_wallet); // mapKeyMetadata
+    if (IsLocked() || IsWalletFlagSet(WALLET_FLAG_KEY_ORIGIN_METADATA)) {
+        return;
+    }
+
+    std::unique_ptr<WalletBatch> batch = MakeUnique<WalletBatch>(*database);
+    for (auto& meta_pair : mapKeyMetadata) {
+        CKeyMetadata& meta = meta_pair.second;
+        if (!meta.hd_seed_id.IsNull() && !meta.has_key_origin && meta.hdKeypath != "s") { // If the hdKeypath is "s", that's the seed and it doesn't have a key origin
+            CKey key;
+            GetKey(meta.hd_seed_id, key);
+            CExtKey masterKey;
+            masterKey.SetSeed(key.begin(), key.size());
+            // Add to map
+            CKeyID master_id = masterKey.key.GetPubKey().GetID();
+            std::copy(master_id.begin(), master_id.begin() + 4, meta.key_origin.fingerprint);
+            if (!ParseHDKeypath(meta.hdKeypath, meta.key_origin.path)) {
+                throw std::runtime_error("Invalid stored hdKeypath");
+            }
+            meta.has_key_origin = true;
+            if (meta.nVersion < CKeyMetadata::VERSION_WITH_KEY_ORIGIN) {
+                meta.nVersion = CKeyMetadata::VERSION_WITH_KEY_ORIGIN;
+            }
+
+            // Write meta to wallet
+            CPubKey pubkey;
+            if (GetPubKey(meta_pair.first, pubkey)) {
+                batch->WriteKeyMeta(pubkey, meta, true);
+            }
+        }
+    }
+    SetWalletFlag(WALLET_FLAG_KEY_ORIGIN_METADATA);
 }
 
 bool CWallet::LoadCryptedKey(const CPubKey &vchPubKey, const std::vector<unsigned char> &vchCryptedSecret)
@@ -1690,6 +1721,7 @@ CPubKey CWallet::DeriveNewSeed(const CKey& key)
 
     // set the hd keypath to "s" -> Seed, refers the seed to itself
     metadata.hdKeypath     = "s";
+    metadata.has_key_origin = false;
     metadata.hd_seed_id = seed.GetID();
 
     {
@@ -3820,59 +3852,33 @@ bool CWallet::CreateTransaction(const std::vector<CRecipient>& vecSend, CTransac
                 }
 
             } else {
-#if 0
-                std::string sError;
+
+                uiInterface.NotifyWaitingForDevice(true);
+
+                int nIn = 0;
+                for (const auto &coin : vecCoins)
                 {
-                    CCoinsView viewDummy;
-                    CCoinsViewCache view(&viewDummy);
-                    for (const auto &coin : vecCoins) {
-                        Coin newcoin;
-                        newcoin.out.scriptPubKey = coin.txout.scriptPubKey;
-                        newcoin.out.nValue = coin.txout.nValue;
-                        newcoin.nHeight = 1;
-                        view.AddCoin(coin.outpoint, std::move(newcoin), true);
-                    }
+                    const CScript& scriptPubKey = coin.txout.scriptPubKey;
+                    SignatureData sigdata;
 
-                    std::vector<std::unique_ptr<usb_device::CUSBDevice> > vDevices;
-                    usb_device::CUSBDevice *pDevice = usb_device::SelectDevice(vDevices, sError);
-                    if (!pDevice) {
-                        return error("Failed to open dongle");
-                    }
-                    uiInterface.NotifyWaitingForDevice(false);
-
-                    pDevice->PrepareTransaction(txNew, view, *this, SIGHASH_ALL);
-                    if (!sError.empty()) {
-                        pDevice->Close();
-                        uiInterface.NotifyWaitingForDevice(true);
-                        return error("PrepareTransaction for device failed: %s", sError);
-                    }
-
-                    int nIn = 0;
-                    for (const auto &coin : vecCoins)
+                    if (!ProduceSignature(*this, HardwareSigner(&txNew, nIn, SIGHASH_ALL), scriptPubKey, sigdata))
                     {
-                        const CScript& scriptPubKey = coin.txout.scriptPubKey;
-                        const CAmount& amountIn = coin.txout.nValue;
-
-                        CTxDestination address;
-                        ExtractDestination(scriptPubKey, address);
-
-                        sError.clear();
-                        SignatureData sigdata;
-                        ProduceSignature(*this, usb_device::DeviceSignatureCreator(pDevice, &txNew, nIn, amountIn, SIGHASH_ALL), scriptPubKey, sigdata);
-                        if (!sError.empty()) {
-                            pDevice->Close();
-                            uiInterface.NotifyWaitingForDevice(true);
-                            return error("ProduceSignature from device failed: %s", sError);
-                        }
-
-                        UpdateInput(txNew.vin[nIn], sigdata);
-                        nIn++;
+                        strFailReason = _("Signing transaction failed");
+                        return false;
+                    } else {
+                        UpdateTransaction(txNew, nIn, sigdata);
                     }
 
-                    pDevice->Close();
-                    uiInterface.NotifyWaitingForDevice(true);
+                    nIn++;
                 }
-#endif
+                ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+                std::string txPsbt;
+                std::string rawHexTx = EncodeHexTx(txNew);
+                LogPrintf("%s\n", rawHexTx);
+                ConvertToPSBT(rawHexTx, txPsbt);
+                LogPrintf("%s\n", txPsbt);
+                uiInterface.NotifyWaitingForDevice(true);
             }
         }
 
@@ -5633,5 +5639,24 @@ bool CWallet::CreateCoinStake(unsigned int nBits, CAmount blockReward, CMutableT
     }
 
     nLastStakeSetUpdate = 0;
+    return true;
+}
+
+bool CWallet::GetKeyOrigin(const CKeyID& keyID, KeyOriginInfo& info) const
+{
+    CKeyMetadata meta;
+    {
+        LOCK(cs_wallet);
+        auto it = mapKeyMetadata.find(keyID);
+        if (it != mapKeyMetadata.end()) {
+            meta = it->second;
+        }
+    }
+    if (meta.has_key_origin) {
+        std::copy(meta.key_origin.fingerprint, meta.key_origin.fingerprint + 4, info.fingerprint);
+        info.path = meta.key_origin.path;
+    } else { // Single pubkeys get the master fingerprint of themselves
+        std::copy(keyID.begin(), keyID.begin() + 4, info.fingerprint);
+    }
     return true;
 }

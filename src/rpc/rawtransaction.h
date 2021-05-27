@@ -15,4 +15,9 @@ void TxInErrorToJSON(const CTxIn& txin, UniValue& vErrorsRet, const std::string&
 /** Sign a transaction with the given keystore and previous transactions */
 UniValue SignTransaction(CMutableTransaction& mtx, const UniValue& prevTxs, CBasicKeyStore *keystore, bool tempKeystore, const UniValue& hashType);
 
+/** Create a transaction from univalue parameters */
+CMutableTransaction ConstructTransaction(const UniValue& inputs_in, const UniValue& outputs_in, const UniValue& locktime);
+
+std::string WriteHDKeypath(const std::vector<uint32_t>& keypath);
+
 #endif // BITCOIN_RPC_RAWTRANSACTION_H
