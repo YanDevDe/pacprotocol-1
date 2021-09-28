@@ -188,6 +188,10 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(std::shared_ptr<C
         if (!fStakeFound)
             return nullptr;
     }
+    else
+    {
+        coinbaseTx.vout[0].nValue = blockReward;
+    }
 
     if (fDIP0003Active_context) {
         for (const Consensus::LLMQType& type : llmq::CLLMQUtils::GetEnabledQuorumTypes(pindexPrev)) {
@@ -576,6 +580,8 @@ void static BitcoinMiner(const CChainParams& chainparams, CConnman& connman, std
             do {
                 bool fvNodesEmpty = connman.GetNodeCount(CConnman::CONNECTIONS_ALL) == 0;
                 if (!fvNodesEmpty && !IsInitialBlockDownload() && masternodeSync.IsSynced())
+                    break;
+                if (Params().NetworkIDString() == CBaseChainParams::TESTNET)
                     break;
                 MilliSleep(5000);
             } while (true);
