@@ -1467,6 +1467,10 @@ void CWallet::SyncTransaction(const CTransactionRef& ptx, const CBlockIndex *pin
     fAnonymizableTallyCachedNonDenom = false;
 }
 
+void CWallet::_SyncTransaction(const CTransactionRef& ptx, const CBlockIndex *pindex, int posInBlock) {
+    SyncTransaction(ptx, pindex, posInBlock);
+}
+
 void CWallet::TransactionAddedToMempool(const CTransactionRef& ptx, int64_t nAcceptTime) {
     LOCK2(cs_main, cs_wallet);
     SyncTransaction(ptx);
@@ -2805,6 +2809,92 @@ CAmount CWallet::GetDenominatedBalance(bool unconfirmed) const
     }
 
     return nTotal;
+}
+
+UniValue CWallet::GetTokenBalance() const
+{
+    std::map<std::string, CAmount> mBalance;
+    {
+        LOCK2(cs_main, cs_wallet);
+        for (std::map<uint256, CWalletTx>::const_iterator it = mapWallet.begin(); it != mapWallet.end(); ++it) {
+            const CWalletTx *pcoin = &(*it).second;
+            if (pcoin->IsTrusted()) {
+                std::map<std::string, CAmount> tmp = pcoin->GetTokenAvailableCredit();
+                for (auto &it : tmp) {
+                    mBalance[it.first] += it.second;
+                }
+            }
+        }
+    }
+
+    UniValue result(UniValue::VARR);
+    for (auto &it : mBalance) {
+        UniValue obj(UniValue::VOBJ);
+        obj.pushKV("token", it.first);
+        obj.pushKV("tokenAmount", it.second);
+        result.push_back(obj);
+    }
+
+    return result;
+}
+
+std::map<std::string, CAmount> CWalletTx::GetTokenAvailableCredit() const
+{
+    std::map<std::string, CAmount> mCredit;
+    if (pwallet == nullptr)
+        return mCredit;
+
+    // Must wait until coinbase is safely deep enough in the chain before valuing it
+    if (IsCoinBase() && GetBlocksToMaturity() > 0)
+        return mCredit;
+
+    CAmount nCredit = 0;
+    CAmount tmpCredit = nCredit;
+    uint256 hashTx = GetHash();
+
+    for (unsigned int i = 0; i < tx->vout.size(); i++) {
+        if (!pwallet->IsSpent(hashTx, i)) {
+            const CTxOut &txout = tx->vout[i];
+	    nCredit += pwallet->GetCredit(txout, ISMINE_SPENDABLE);
+	    if (!MoneyRange(nCredit))
+		throw std::runtime_error("CWalletTx::GetTokenAvailableCredit() : value out of range");
+	    if (nCredit == tmpCredit)
+		continue;
+	    tmpCredit = nCredit;
+	    if (txout.scriptPubKey.IsPayToScriptHash()) {
+	        CTxDestination address;
+		if (ExtractDestination(txout.scriptPubKey, address)) {
+		    const CScriptID &hash = boost::get<CScriptID>(address);
+		    CScript redeemScript;
+		    if (pwallet->GetCScript(hash, redeemScript)) {
+			if (!redeemScript.IsPayToToken())
+			    continue;
+			int namesize = redeemScript[1];
+			int amountsize = redeemScript[2 + namesize];
+			std::vector<unsigned char> vecName(redeemScript.begin() + 2, redeemScript.begin() + 2 + namesize);
+			std::vector<unsigned char> vecAmount(redeemScript.begin() + 3 + namesize, redeemScript.begin() + 3 + namesize + amountsize);
+			std::string tokenName(vecName.begin(), vecName.end());
+			CAmount tokenAmount = CScriptNum(vecAmount, true).getamount();
+			mCredit[tokenName] = tokenAmount;
+		    }
+		}
+	    }
+	    else if (txout.scriptPubKey.IsPayToToken())
+            {
+		int namesize = txout.scriptPubKey[1];
+		int amountsize = txout.scriptPubKey[2 + namesize];
+		std::vector<unsigned char> vecName(txout.scriptPubKey.begin() + 2, txout.scriptPubKey.begin() + 2 + namesize);
+		std::vector<unsigned char> vecAmount(txout.scriptPubKey.begin() + 3 + namesize, txout.scriptPubKey.begin() + 3 + namesize + amountsize);
+		std::string tokenName(vecName.begin(), vecName.end());
+		CAmount tokenAmount = CScriptNum(vecAmount, true).getamount();
+		mCredit[tokenName] = tokenAmount;
+	    }
+        }
+    }
+
+    nAvailableCreditCached = nCredit;
+    fAvailableCreditCached = true;
+    return mCredit;
 }
 
 CAmount CWallet::GetUnconfirmedBalance() const

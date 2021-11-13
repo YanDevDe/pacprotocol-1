@@ -372,6 +372,7 @@ libdash_server_a_SOURCES = \
   rpc/rpcevo.cpp \
   rpc/rpcquorums.cpp \
   rpc/server.cpp \
+  rpc/token.cpp \
   rpc/coinjoin.cpp \
   rpc/util.cpp \
   script/sigcache.cpp \
@@ -414,6 +415,7 @@ libdash_wallet_a_SOURCES = \
   wallet/init.cpp \
   wallet/rpcdump.cpp \
   wallet/rpcwallet.cpp \
+  wallet/rpctoken.cpp \
   wallet/wallet.cpp \
   wallet/walletdb.cpp \
   wallet/walletutil.cpp \

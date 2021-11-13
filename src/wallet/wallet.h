@@ -362,6 +362,9 @@ public:
     mutable CAmount nAvailableWatchCreditCached;
     mutable CAmount nChangeCached;
 
+    CWalletTx() { Init(NULL); }
+    CWalletTx(const CWallet *pwalletIn) { Init(pwalletIn); }
+    CWalletTx(const CWallet *pwalletIn, const CMerkleTx &txIn) : CMerkleTx(txIn) { Init(pwalletIn); }
     CWalletTx(const CWallet* pwalletIn, CTransactionRef arg) : CMerkleTx(std::move(arg))
     {
         Init(pwalletIn);
@@ -480,6 +483,8 @@ public:
 
     CAmount GetAnonymizedCredit(const CCoinControl* coinControl = nullptr) const;
     CAmount GetDenominatedCredit(bool unconfirmed, bool fUseCache=true) const;
+
+    std::map<std::string, CAmount> GetTokenAvailableCredit() const;
 
     // Get the marginal bytes if spending the specified output from this transaction
     int GetSpendSize(unsigned int out) const
@@ -1063,6 +1068,9 @@ public:
     CAmount GetImmatureWatchOnlyBalance() const;
     CAmount GetLegacyBalance(const isminefilter& filter, int minDepth, const std::string* account, const bool fAddLocked) const;
 
+    //! token functions
+    UniValue GetTokenBalance() const;
+
     CAmount GetAnonymizableBalance(bool fSkipDenominated = false, bool fSkipUnconfirmed = true) const;
     CAmount GetAnonymizedBalance(const CCoinControl* coinControl = nullptr) const;
     float GetAverageAnonymizedRounds() const;
@@ -1280,6 +1288,9 @@ public:
 
     /** Whether a given output is spendable by this wallet */
     bool OutputEligibleForSpending(const COutput& output, const CoinEligibilityFilter& eligibility_filter) const;
+
+    /** Public wrapper for SyncTransaction */
+    void _SyncTransaction(const CTransactionRef& tx, const CBlockIndex *pindex = nullptr, int posInBlock = 0) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
 };
 
 /** A key allocated from the key pool. */

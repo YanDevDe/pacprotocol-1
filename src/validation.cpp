@@ -483,6 +483,13 @@ bool ContextualCheckTransaction(const CTransaction& tx, CValidationState &state,
     bool fDIP0001Active_context = nHeight >= consensusParams.DIP0001Height;
     bool fDIP0003Active_context = nHeight >= consensusParams.DIP0003Height;
 
+    // allow tokens to be included after activation height
+    if (tx.HasTokenOutput()) {
+        if (nHeight < consensusParams.nTokenHeight) {
+            return state.DoS(100, false, REJECT_INVALID, "bad-txns-premature-token-usage");
+        }
+    }
+
     if (fDIP0003Active_context) {
         // check version 3 transaction types
         if (tx.nVersion >= 3) {
@@ -800,10 +807,13 @@ static bool AcceptToMemoryPoolWorker(const CChainParams& chainparams, CTxMemPool
             return state.DoS(0, false, REJECT_INSUFFICIENTFEE, "min relay fee not met", false, strprintf("%d < %d", nModifiedFees, ::minRelayTxFee.GetFee(nSize)));
         }
 
-        if (nAbsurdFee && nFees > nAbsurdFee)
-            return state.Invalid(false,
-                REJECT_HIGHFEE, "absurdly-high-fee",
-                strprintf("%d > %d", nFees, nAbsurdFee));
+        // Simple workaround for the purpose of testing token layer
+        if (!ptx->HasTokenOutput()) {
+            if (nAbsurdFee && nFees > nAbsurdFee)
+                return state.Invalid(false,
+                    REJECT_HIGHFEE, "absurdly-high-fee",
+                    strprintf("%d > %d", nFees, nAbsurdFee));
+        }
 
         // Calculate in-mempool ancestors, up to a limit.
         CTxMemPool::setEntries setAncestors;

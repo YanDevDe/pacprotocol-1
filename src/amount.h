@@ -15,6 +15,7 @@ typedef int64_t CAmount;
 
 static const CAmount COIN = 100000000;
 static const CAmount CENT = 1000000;
+static const CAmount MAX_TOKEN_SUPPLY = COIN;
 
 /** No amount larger than this (in satoshi) is valid.
  *
