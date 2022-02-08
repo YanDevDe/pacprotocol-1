@@ -223,6 +223,7 @@ BITCOIN_CORE_H = \
   pos/blocksigner.h \
   pos/kernel.h \
   pos/prevstake.h \
+  pos/stake.h \
   pow.h \
   protocol.h \
   random.h \
@@ -360,6 +361,7 @@ libdash_server_a_SOURCES = \
   pos/blocksigner.cpp \
   pos/kernel.cpp \
   pos/prevstake.cpp \
+  pos/stake.cpp \
   pow.cpp \
   rest.cpp \
   rpc/blockchain.cpp \

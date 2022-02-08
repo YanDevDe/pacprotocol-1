@@ -748,14 +748,6 @@ private:
     mutable std::vector<CompactTallyItem> vecAnonymizableTallyCachedNonDenom;
 
     /**
-     * Staking parameters for wallet
-     */
-    unsigned int nHashDrift{45};
-    unsigned int nHashInterval{22};
-    uint64_t nStakeSplitThreshold{2000};
-    int nStakeSetUpdateTime{300};
-
-    /**
      * Used to keep track of spent outpoints, and
      * detect and report conflicts (double-spends or
      * mutated transactions where the mutant gets mined).
@@ -930,14 +922,6 @@ public:
     // Coin selection
     bool SelectTxDSInsByDenomination(int nDenom, CAmount nValueMax, std::vector<CTxDSIn>& vecTxDSInRet);
     bool SelectDenominatedAmounts(CAmount nValueMax, std::set<CAmount>& setAmountsRet) const;
-    using StakeCoinsSet = std::set<std::pair<const CWalletTx*, unsigned int>>;
-
-    // Staking routines
-    bool MintableCoins() const;
-    bool SelectStakeCoins(StakeCoinsSet &setCoins, CAmount nTargetAmount, const CScript &scriptFilterPubKey) const;
-    bool CreateCoinStake(unsigned int nBits, CAmount blockReward, CMutableTransaction& txNew, unsigned int& nTxNewTime, std::vector<const CWalletTx *> &vwtxPrev) const;
-    bool CreateCoinStakeKernel(CScript &kernelScript, const CScript &stakeScript, unsigned int nBits, const CBlock& blockFrom, unsigned int nTxPrevOffset, const CTransactionRef &txPrev, const COutPoint& prevout, unsigned int &nTimeTx, bool fPrintProofOfStake) const;
-    void FillCoinStakePayments(CMutableTransaction &txNew, const CScript &kernelScript, const COutPoint &stakePrevout, CAmount blockReward) const;
 
     bool SelectCoinsGroupedByAddresses(std::vector<CompactTallyItem>& vecTallyRet, bool fSkipDenominated = true, bool fAnonymizable = true, bool fSkipUnconfirmed = true, int nMaxOupointsPerAddress = -1) const;
 

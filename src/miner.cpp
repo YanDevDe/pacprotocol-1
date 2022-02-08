@@ -20,6 +20,7 @@
 #include <policy/feerate.h>
 #include <policy/policy.h>
 #include <pos/blocksigner.h>
+#include <pos/stake.h>
 #include <pow.h>
 #include <primitives/transaction.h>
 #include <script/standard.h>
@@ -175,7 +176,7 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(std::shared_ptr<C
         bool fStakeFound = false;
         if (nSearchTime >= nLastCoinStakeSearchTime) {
             unsigned int nTxNewTime = 0;
-            if (pwallet->CreateCoinStake(pblock->nBits, blockReward, coinstakeTx, nTxNewTime, vwtxPrev)) {
+            if (CreateCoinStake(pblock->nBits, blockReward, coinstakeTx, nTxNewTime, vwtxPrev)) {
                 pblock->nTime = nTxNewTime;
                 coinbaseTx.vout[0].SetEmpty();
                 FillBlockPayments(coinstakeTx, nHeight, blockReward, pblocktemplate->voutMasternodePayments, pblocktemplate->voutSuperblockPayments);

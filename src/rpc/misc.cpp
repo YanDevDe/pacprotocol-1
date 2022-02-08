@@ -14,6 +14,7 @@
 #include <key_io.h>
 #include <net.h>
 #include <netbase.h>
+#include <pos/stake.h>
 #include <rpc/blockchain.h>
 #include <rpc/server.h>
 #include <rpc/util.h>
@@ -990,8 +991,8 @@ UniValue getstakingstatus(const JSONRPCRequest& request)
     obj.push_back(Pair("haveconnections", g_connman->GetNodeCount(CConnman::CONNECTIONS_ALL) > 0));
     if (pwallet) {
         obj.push_back(Pair("walletunlocked", !pwallet->IsLocked()));
-        obj.push_back(Pair("mintablecoins", pwallet->MintableCoins()));
-        obj.push_back(Pair("enoughcoins", pwallet->GetBalance() > 0));
+        obj.push_back(Pair("mintablecoins", MintableCoins()));
+        obj.push_back(Pair("enoughcoins", stakingWallet->GetBalance() > 0));
     }
     obj.push_back(Pair("mnsync", masternodeSync.IsSynced()));
 
