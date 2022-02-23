@@ -127,9 +127,10 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(std::shared_ptr<C
     pblock = &pblocktemplate->block; // pointer for convenience
 
     // For now, first usable wallet..
-    CWallet *pwallet = wallet.get();
-    if (!pwallet)
-        return nullptr;
+    CWallet *pwallet = nullptr;
+    if (fProofOfStake) {
+        pwallet = wallet.get();
+    }
 
     // Add dummy coinbase tx as first transaction
     pblock->vtx.emplace_back();
