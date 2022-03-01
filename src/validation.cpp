@@ -4078,7 +4078,7 @@ bool CChainState::AcceptBlock(const std::shared_ptr<const CBlock>& pblock, CVali
 
     //// hashproof test
     uint256 hashProofOfStake = uint256();
-    if (block.IsProofOfStake()) {
+    if (!fReindex && block.IsProofOfStake()) {
         if (!CheckProofOfStake(block, hashProofOfStake, pindex->pprev))
             return error("%s: check proof-of-stake failed for block %s\n", __func__, block.GetHash().ToString());
         if (hashProofOfStake == uint256())
