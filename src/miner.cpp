@@ -167,7 +167,7 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(std::shared_ptr<C
     CAmount blockReward = GetBlockSubsidy(0, pindexPrev->nHeight, Params().GetConsensus());
     std::vector<const CWalletTx*> vwtxPrev;
 
-    if(fProofOfStake) {
+    if (fProofOfStake) {
         assert(pwallet);
         boost::this_thread::interruption_point();
         pblock->nBits = GetNextWorkRequired(pindexPrev, pblock, chainparams.GetConsensus());
@@ -186,8 +186,11 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(std::shared_ptr<C
             nLastCoinStakeSearchInterval = nSearchTime - nLastCoinStakeSearchTime;
             nLastCoinStakeSearchTime = nSearchTime;
         }
-        if (!fStakeFound)
+        if (!fStakeFound) {
             return nullptr;
+        }
+    } else {
+        coinbaseTx.vout[0].nValue = blockReward;
     }
 
     if (fDIP0003Active_context) {
@@ -244,6 +247,12 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(std::shared_ptr<C
         SetTxPayload(coinbaseTx, cbTx);
     }
 
+    // Update coinbase transaction with additional info about masternode and governance payments,
+    // get some info back to pass to getblocktemplate
+    if (!fProofOfStake) {
+        FillBlockPayments(coinbaseTx, nHeight, blockReward, pblocktemplate->voutMasternodePayments, pblocktemplate->voutSuperblockPayments);
+    }
+
     pblock->vtx[0] = MakeTransactionRef(std::move(coinbaseTx));
     pblocktemplate->vTxFees[0] = -nFees;
 
@@ -257,7 +266,7 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(std::shared_ptr<C
     pblocktemplate->vTxSigOps[0] = GetLegacySigOpCount(*pblock->vtx[0]);
 
     CValidationState state;
-    if (!TestBlockValidity(state, chainparams, *pblock, pindexPrev, false, false)) {
+    if (!fProofOfStake && !TestBlockValidity(state, chainparams, *pblock, pindexPrev, false, false)) {
         throw std::runtime_error(strprintf("%s: TestBlockValidity failed: %s", __func__, FormatStateMessage(state)));
     }
     int64_t nTime2 = GetTimeMicros();
