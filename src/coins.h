@@ -36,15 +36,17 @@ public:
     //! whether containing transaction was a coinbase
     unsigned int fCoinBase : 1;
 
-    //! whether containing transaction was a coinstake
-    unsigned int fCoinStake : 1;
+    // whether transaction is a coinstake
+    bool fCoinStake;
 
     //! at which height this containing transaction was included in the active block chain
-    uint32_t nHeight : 30;
+    uint32_t nHeight : 31;
 
     //! construct a Coin from a CTxOut and height/coinbase information.
-    Coin(CTxOut&& outIn, int nHeightIn, bool fCoinBaseIn, bool fCoinStakeIn) : out(std::move(outIn)), fCoinBase(fCoinBaseIn), fCoinStake(fCoinStakeIn), nHeight(nHeightIn) {}
-    Coin(const CTxOut& outIn, int nHeightIn, bool fCoinBaseIn, bool fCoinStakeIn) : out(outIn), fCoinBase(fCoinBaseIn), fCoinStake(fCoinStakeIn), nHeight(nHeightIn) {}
+    Coin(CTxOut&& outIn, int nHeightIn, bool fCoinBaseIn, bool fCoinStakeIn) :
+        out(std::move(outIn)), fCoinBase(fCoinBaseIn), nHeight(nHeightIn), fCoinStake(fCoinStakeIn) {}
+    Coin(const CTxOut& outIn, int nHeightIn, bool fCoinBaseIn, bool fCoinStakeIn) :
+        out(outIn), fCoinBase(fCoinBaseIn), nHeight(nHeightIn), fCoinStake(fCoinStakeIn) {}
 
     void Clear() {
         out.SetNull();
@@ -67,24 +69,25 @@ public:
     template<typename Stream>
     void Serialize(Stream &s) const {
         assert(!IsSpent());
-        std::bitset<32> code(nHeight);
-        code[30] = fCoinStake;
-        code[31] = fCoinBase;
-        ::Serialize(s, VARINT(code.to_ulong()));
+        uint32_t code = nHeight * uint32_t{2} + fCoinBase;
+        ::Serialize(s, VARINT(code));
         ::Serialize(s, CTxOutCompressor(REF(out)));
+        // peercoin flags
+        unsigned int nFlag = fCoinStake? 1 : 0;
+        ::Serialize(s, VARINT(nFlag));
     }
 
     template<typename Stream>
     void Unserialize(Stream &s) {
         uint32_t code = 0;
         ::Unserialize(s, VARINT(code));
-        std::bitset<32> bitset(code);
-        fCoinStake = bitset[30];
-        fCoinBase = bitset[31];
-        bitset.reset(30);
-        bitset.reset(31);
-        nHeight = bitset.to_ulong();
-        ::Unserialize(s, CTxOutCompressor(out));
+        nHeight = code >> 1;
+        fCoinBase = code & 1;
+        ::Unserialize(s, CTxOutCompressor(REF(out)));
+        // peercoin flags
+        unsigned int nFlag = 0;
+        ::Unserialize(s, VARINT(nFlag));
+        fCoinStake = nFlag & 1;
     }
 
     bool IsSpent() const {
