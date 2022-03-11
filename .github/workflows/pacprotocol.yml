@@ -7,10 +7,23 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
         matrix:
-          os: [x86_64-linux-gnu]
+          HOST: [x86_64-pc-linux-gnu, x86_64-apple-darwin14, x86_64-w64-mingw32]
+          include:
+          - HOST: x86_64-pc-linux-gnu
+            TYPE: "linux"
+            DEPS: build-essential libtool autotools-dev automake pkg-config bsdmainutils curl git ca-certificates ccache bsdmainutils
+          - HOST: x86_64-apple-darwin14
+            TYPE: "macos"
+            DEPS: build-essential libtool autotools-dev automake pkg-config bsdmainutils curl git ca-certificates ccache bsdmainutils python3 python3-setuptools libcap-dev zlib1g-dev libbz2-dev
+          - HOST: x86_64-w64-mingw32
+            TYPE: "windows"
+            DEPS: build-essential libtool autotools-dev automake pkg-config bsdmainutils curl git python3 g++-mingw-w64-x86-64
 
     steps:
       - uses: actions/checkout@v2
+
+      - name: Get number of CPU cores
+        uses: SimenB/github-actions-cpu-cores@v1
 
       - name: Cache apt depencenies
         uses: actions/cache@v2
@@ -23,13 +36,13 @@ jobs:
         id: cache-dependencies
         uses: actions/cache@v2
         with:
-          path: depends/${{ matrix.os }}
-          key: ${{ matrix.os }}-${{ hashFiles('depends/packages/*.mk') }}
+          path: depends/${{ matrix.HOST }}
+          key: ${{ matrix.HOST }}-${{ hashFiles('depends/packages/*.mk') }}
 
       - name: Install dependencies
         env:
           CACHE_HIT: ${{steps.cache-apt.outputs.cache-hit}}
-          DEPS: build-essential libtool autotools-dev automake pkg-config bsdmainutils curl git ca-certificates ccache
+          DEPS: ${{matrix.DEPS}}
         run: |
           if [[ "$CACHE_HIT" == 'true' ]]; then
             sudo cp --force --recursive ~/apt-cache/* /
@@ -41,16 +54,24 @@ jobs:
             done
           fi
 
+      - name: Download Mac OSX SDK for depends
+        if: matrix.TYPE == "macos" && steps.cache-dependencies.outputs.cache-hit != 'true' && steps.cache-apt.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p depends/sdk-sources
+          mkdir -p depends/SDKs
+          curl https://bitcoincore.org/depends-sources/sdks/MacOSX10.11.sdk.tar.gz -o depends/sdk-sources/MacOSX10.11.sdk.tar.gz
+          tar -C depends/SDKs -xf depends/sdk-sources/MacOSX10.11.sdk.tar.gz
+
       - name: Build depends
         if: steps.cache-dependencies.outputs.cache-hit != 'true' && steps.cache-apt.outputs.cache-hit != 'true'
-        run: cd depends/ && make -j4 HOST=${{matrix.os}}
+        run: cd depends/ && make -j${{ steps.cpu-cores.outputs.count }} HOST=${{matrix.HOST}}
 
       - name: Refresh automake configs
         run: ./autogen.sh
 
       - name: Configure automake
-        run: ./configure --prefix=`pwd`/depends/${{ matrix.os }}
+        run: ./configure --prefix=`pwd`/depends/${{ matrix.HOST }}
 
       - name: Build codebase
-        run: make -j4
+        run: make -j${{ steps.cpu-cores.outputs.count }}
 
