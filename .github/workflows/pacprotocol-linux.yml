@@ -7,14 +7,15 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
         matrix:
-          HOST: [x86_64-linux-gnu, x86_64-apple-darwin14, x86_64-w64-mingw32]
           include:
           - HOST: x86_64-linux-gnu
             TYPE: "linux"
             DEPS: build-essential libtool autotools-dev automake pkg-config bsdmainutils curl git ca-certificates ccache bsdmainutils
+            
           - HOST: x86_64-apple-darwin14
             TYPE: "macos"
-            DEPS: build-essential libtool autotools-dev automake pkg-config bsdmainutils curl git ca-certificates ccache bsdmainutils python3 python3-setuptools libcap-dev zlib1g-dev libbz2-dev
+            DEPS: build-essential libtool autotools-dev automake pkg-config bsdmainutils curl git ca-certificates ccache bsdmainutils libc6-dev python3 python3-setuptools libcap-dev zlib1g-dev libbz2-dev
+          
           - HOST: x86_64-w64-mingw32
             TYPE: "windows"
             DEPS: build-essential libtool autotools-dev automake pkg-config bsdmainutils curl git python3 g++-mingw-w64-x86-64
