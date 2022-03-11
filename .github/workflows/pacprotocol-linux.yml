@@ -55,7 +55,7 @@ jobs:
           fi
 
       - name: Download Mac OSX SDK for depends
-        if: matrix.TYPE == "macos" && steps.cache-dependencies.outputs.cache-hit != 'true' && steps.cache-apt.outputs.cache-hit != 'true'
+        if: matrix.TYPE == 'macos' && steps.cache-dependencies.outputs.cache-hit != 'true' && steps.cache-apt.outputs.cache-hit != 'true'
         run: |
           mkdir -p depends/sdk-sources
           mkdir -p depends/SDKs
