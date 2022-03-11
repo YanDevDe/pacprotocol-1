@@ -1,4 +1,4 @@
-name: 'build pacprotocol (x86_64-linux-gnu)'
+name: 'Cross Build PAC Protocol'
 
 on: [push]
 
@@ -7,9 +7,9 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
         matrix:
-          HOST: [x86_64-pc-linux-gnu, x86_64-apple-darwin14, x86_64-w64-mingw32]
+          HOST: [x86_64-linux-gnu, x86_64-apple-darwin14, x86_64-w64-mingw32]
           include:
-          - HOST: x86_64-pc-linux-gnu
+          - HOST: x86_64-linux-gnu
             TYPE: "linux"
             DEPS: build-essential libtool autotools-dev automake pkg-config bsdmainutils curl git ca-certificates ccache bsdmainutils
           - HOST: x86_64-apple-darwin14
